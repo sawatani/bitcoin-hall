@@ -1,0 +1,20 @@
+name:                bitcoin-hall
+version:             0.1.0.0
+-- synopsis:
+-- description:
+homepage:            https://github.com/sawatani/bitcoin-hall#readme
+license:             GPL3
+license-file:        LICENSE
+author:              Kunio SAWATANI
+maintainer:          devel@fathens.org
+copyright:           fathens.org
+category:            Bitcoin, Finance
+build-type:          Simple
+cabal-version:       >=1.10
+extra-source-files:  README.md
+
+executable bitcoin-hall
+  hs-source-dirs:      src
+  main-is:             Main.hs
+  default-language:    Haskell2010
+  build-depends:       base >= 4.7 && < 5
