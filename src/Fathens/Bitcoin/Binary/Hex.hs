@@ -1,24 +1,25 @@
 module Fathens.Bitcoin.Binary.Hex (
-  parseHex
+  bigEndian
+, toBigEndian
 , parseAtBase
 ) where
 
-import           Data.Bits             (shiftL, (.|.))
-import           Data.ByteString       (ByteString)
-import           Data.ByteString.Char8 (elemIndex, pack, unpack)
-import           Data.Char             (toLower)
+import           Data.Bits (shiftL, shiftR, (.|.))
+import           Data.List (unfoldr)
+import           Data.Word (Word8)
 
-hexs :: ByteString
-hexs = pack "0123456789abcdef"
+bigEndian :: [Word8] -> Integer
+bigEndian = foldr f 0 . reverse
+  where
+    f v i = shiftL i 8 .|. fromIntegral v
+toBigEndian :: Integer -> [Word8]
+toBigEndian = unfoldr f
+  where
+    f 0 = Nothing
+    f i = Just (fromInteger i :: Word8, shiftR i 8)
 
-hexChar2Int :: Char -> Maybe Int
-hexChar2Int c = elemIndex (toLower c) hexs
-
-parseHex :: ByteString -> Maybe Integer
-parseHex = parseAtBase 16 hexChar2Int
-
-parseAtBase :: Int -> (Char -> Maybe Int) -> ByteString -> Maybe Integer
-parseAtBase base c2i = foldr f (Just $ toInteger 0) . reverse . unpack
+parseAtBase :: Int -> (Char -> Maybe Int) -> String -> Maybe Integer
+parseAtBase base c2i = foldr f (Just $ toInteger 0) . reverse
   where
     d = toInteger base
     f c v = do
