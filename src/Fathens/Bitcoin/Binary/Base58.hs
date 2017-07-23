@@ -1,51 +1,56 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 module Fathens.Bitcoin.Binary.Base58 (
-  encodeBase58
+  Base58
+, base58
+, encodeBase58
 , decodeBase58
 ) where
 
-import           Data.ByteString            (ByteString)
-import qualified Data.ByteString            as BS
-import qualified Data.ByteString.Char8      as C8
-import           Data.List                  (elemIndex, (!!))
+import           Control.Monad
+import           Data.ByteString.Lazy       (ByteString)
+import qualified Data.ByteString.Lazy       as BS
+import qualified Data.ByteString.Lazy.Char8 as C8
+import           Data.List                  (elem, elemIndex, (!!))
 import           Data.Maybe                 (fromMaybe, isJust, listToMaybe)
+import           Data.Maybe                 (fromJust)
+import           Data.Text.Lazy             (Text)
+import qualified Data.Text.Lazy             as T
+import           Data.Text.Lazy.Builder     as TB
 import           Data.Tuple                 (fst, snd)
 import           Data.Word                  (Word8)
 import           Fathens.Bitcoin.Binary.Num
 import           Numeric                    (readInt, showIntAtBase)
 
-zero :: Word8
-zero = BS.head $ C8.singleton $ head chars
+zero :: Char
+zero = head chars
 
 chars :: [Char]
 chars = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
-v2c :: Int -> Char
-v2c = (chars !!)
+data Base58 = Base58 Text deriving (Show, Eq)
 
-c2v :: Char -> Maybe Int
-c2v c = elemIndex c chars
-
-encodeBase58 :: [Word8] -> ByteString
-encodeBase58 src = (BS.replicate nz zero) `mappend` encoded
+base58 :: Text -> Maybe Base58
+base58 ts = Base58 ts <$ guard isValid
   where
-    (z, b) = span (== 0) src
-    nz = length z
-    encoded | null b = BS.empty
-            | otherwise = C8.pack $ showIntAtBase 58 v2c (fromBigEndian b) ""
+    isValid = flip elem chars `T.all` ts
 
-decodeBase58 :: ByteString -> Maybe [Word8]
-decodeBase58 base58 = do
-  body <- decoded
-  return $ (replicate nz 0) `mappend` body
+encodeBase58 :: ByteString -> Base58
+encodeBase58 src = Base58 $ T.pack $ (zeros . encoded) ""
   where
-    (z, b) = BS.span (== zero) base58
-    nz = BS.length z
-    decoded | BS.null b = Just []
-            | otherwise = do
-                let p = isJust . c2v
-                let f = fromMaybe (error "Invalid Base58 char") . c2v
-                (v,o) <- listToMaybe $ readInt 58 p f $ C8.unpack b
-                r <- case o of
-                  [] -> Just v
-                  _  -> Nothing
-                return $ toBigEndian r
+    (z, b) = BS.span (== 0) src
+    zeros = showString $ flip replicate zero $ fromIntegral $ BS.length z
+    encoded | BS.null b = id
+            | otherwise = showIntAtBase 58 (chars !!) $ fromBigEndian b
+
+decodeBase58 :: Base58 -> ByteString
+decodeBase58 (Base58 src) = zeros `mappend` decoded
+  where
+    (z, b) = T.span (== zero) src
+    zeros = T.length z `BS.replicate` 0
+    decoded = toBigEndian $ readBase58 $ T.unpack $ T.reverse b
+
+readBase58 :: [Char] -> Integer
+readBase58 [] = 0
+readBase58 (h:o) = c2v h + 58 * readBase58 o
+  where
+    c2v c = toInteger $ fromJust $ elemIndex c chars
