@@ -13,11 +13,28 @@ build-type:          Simple
 cabal-version:       >=1.10
 extra-source-files:  README.md
 
-executable bitcoin-hall
+library
+  exposed-modules:     Fathens.Bitcoin.Binary.Base58
+                       Fathens.Bitcoin.Binary.Num
   hs-source-dirs:      src
-  main-is:             Main.hs
   default-language:    Haskell2010
   build-depends:       base >= 4.7 && < 5
                      , binary >= 0.8.3.0
                      , bytestring >= 0.10.8.1
                      , text >= 1.2.2.1
+
+test-suite spec
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test
+  main-is:             Spec.hs
+  default-language:    Haskell2010
+  build-depends:       base
+                     , bitcoin-hall
+                     , hspec >= 2.4.3
+                     , text >= 1.2.2.1
+
+executable hw
+  hs-source-dirs:      app
+  main-is:             Main.hs
+  default-language:    Haskell2010
+  build-depends:       base, bitcoin-hall

@@ -2,6 +2,7 @@
 module Fathens.Bitcoin.Binary.Base58 (
   Base58
 , base58
+, base58Text
 , encodeBase58
 , decodeBase58
 ) where
@@ -33,6 +34,9 @@ base58 :: Text -> Maybe Base58
 base58 ts = Base58 ts <$ guard isValid
   where
     isValid = flip elem chars `T.all` ts
+
+base58Text :: Base58 -> Text
+base58Text (Base58 t) = t
 
 encodeBase58 :: ByteString -> Base58
 encodeBase58 src = Base58 $ T.pack $ (zeros . encoded) ""
