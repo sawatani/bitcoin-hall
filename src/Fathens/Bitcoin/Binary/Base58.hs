@@ -11,13 +11,11 @@ import           Control.Monad
 import           Data.ByteString.Lazy       (ByteString)
 import qualified Data.ByteString.Lazy       as BS
 import qualified Data.ByteString.Lazy.Char8 as C8
-import           Data.List                  (elem, elemIndex, (!!))
-import           Data.Maybe                 (fromMaybe, isJust, listToMaybe)
-import           Data.Maybe                 (fromJust)
+import           Data.List
+import           Data.Maybe
 import           Data.Text.Lazy             (Text)
 import qualified Data.Text.Lazy             as T
 import           Data.Text.Lazy.Builder     as TB
-import           Data.Tuple                 (fst, snd)
 import           Data.Word                  (Word8)
 import           Fathens.Bitcoin.Binary.Num
 import           Numeric                    (readInt, showIntAtBase)
