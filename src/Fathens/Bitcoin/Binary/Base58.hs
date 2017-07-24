@@ -31,7 +31,7 @@ data Base58 = Base58 Text deriving (Show, Eq)
 base58 :: Text -> Maybe Base58
 base58 ts = Base58 ts <$ guard isValid
   where
-    isValid = flip elem chars `T.all` ts
+    isValid = (flip elem chars `T.all` ts) && not (T.null ts)
 
 base58Text :: Base58 -> Text
 base58Text (Base58 t) = t
