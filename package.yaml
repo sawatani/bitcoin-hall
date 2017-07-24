@@ -14,7 +14,11 @@ dependencies:
 - binary >=0.8.3.0
 - bytestring >=0.10.8.1
 - text >=1.2.2.1
+- monad-control >= 1.0.2.1
 - mtl >= 2.2.1
+- katip >= 0.3.1.5
+- safe-exceptions >= 0.1.6.0
+- hspec >=2.4.3
 
 library:
   source-dirs: src
@@ -32,4 +36,3 @@ tests:
     source-dirs: test
     dependencies:
     - bitcoin-hall
-    - hspec >=2.4.3
