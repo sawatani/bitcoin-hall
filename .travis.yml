@@ -1,5 +1,4 @@
-language: haskell
-ghc: 8.0.2
+language: general
 cache:
   directories:
   - $HOME/.stack/
@@ -18,12 +17,12 @@ before_install:
 - stack setup
 - stack exec -- ghc --version
 install:
-- stack install codecov-haskell
+- stack install hpc-coveralls
 - stack install --only-dependencies
 script:
 - stack test --coverage
 - stack build
 after_script:
-- stack exec codecov-haskell -- --exclude-dir=test
+- hpc-coveralls --exclude-dir=test Spec
 notifications:
   email: false
