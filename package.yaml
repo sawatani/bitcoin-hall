@@ -19,6 +19,7 @@ dependencies:
 - katip >= 0.3.1.5
 - safe-exceptions >= 0.1.6.0
 - hspec >=2.4.3
+- QuickCheck >= 2.9.2
 
 library:
   source-dirs: src
