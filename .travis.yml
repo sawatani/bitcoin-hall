@@ -9,8 +9,9 @@ branches:
   - master
   - develop
   - /^feature\/\w+/
+env:
+- PATH=~/.local/bin:$PATH
 before_install:
-- export PATH=~/.local/bin:$PATH
 - if [[ ! -x ~/.local/bin/stack ]]; then
     travis_retry curl -L https://www.stackage.org/stack/linux-x86_64 |
     tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack';
