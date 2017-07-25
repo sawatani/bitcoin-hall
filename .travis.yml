@@ -5,6 +5,8 @@ branches:
   - master
   - develop
   - /^feature\/\w+/
+before_install:
+- sudo apt install stack
 install:
 - stack install codecov-haskell
 - stack install --only-dependencies
