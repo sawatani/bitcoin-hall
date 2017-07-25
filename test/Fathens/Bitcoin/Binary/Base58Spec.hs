@@ -1,6 +1,6 @@
-module Fathens.Bitcoin.Binary.Base58Spec (main, spec) where
+module Fathens.Bitcoin.Binary.Base58Spec (spec) where
 
-import           Data.Maybe                    (fromJust)
+import           Data.Maybe                    (fromJust, isJust)
 import qualified Data.Text.Lazy                as T
 import           Fathens.Bitcoin.Binary.Base58
 import           Fathens.Bitcoin.Binary.Num
@@ -8,6 +8,7 @@ import           Numeric                       (showHex)
 import           Test.Hspec
 import           Test.Hspec.QuickCheck         (prop)
 import           Test.QuickCheck
+
 runTest :: IO ()
 runTest = hspec spec
 
