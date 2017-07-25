@@ -1,0 +1,17 @@
+language: haskell
+ghc: 8.0.2
+branches:
+  only:
+  - master
+  - develop
+  - /^feature\/\w+/
+install:
+- stack install codecov-haskell
+- stack install --only-dependencies
+script:
+- stack test --coverage
+- stack buill
+after_script:
+- stack exec codecov-haskell -- --exclude-dir=test
+notifications:
+  email: false
