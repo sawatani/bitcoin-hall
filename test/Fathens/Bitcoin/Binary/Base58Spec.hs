@@ -32,7 +32,7 @@ spec = do
       in
       (showHex int "") `shouldBe`
       "45770affd9d5708e474b69220c9dc7f67faed1273a" ++
-      "3ccdd044d489563a9d312869dab70c3521bd88d748"
+      "_3ccdd044d489563a9d312869dab70c3521bd88d748"
 
   describe "decode encode, vise versa" $ do
     prop "work keep leading zeros" $
