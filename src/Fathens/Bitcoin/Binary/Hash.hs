@@ -1,5 +1,4 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs            #-}
+{-# LANGUAGE GADTs #-}
 module Fathens.Bitcoin.Binary.Hash (
   Hash160(hash160Data)
 , Hash256(hash256Data)
@@ -27,13 +26,27 @@ import           Data.Word                  (Word8)
 import           Fathens.Bitcoin.Binary.Num
 import           Numeric                    (readInt, showIntAtBase)
 
--- Hash Data
+-- Data
 
 data Hash160 = Hash160 { hash160Data :: ByteString } deriving (Eq)
 data Hash256 = Hash256 { hash256Data :: ByteString } deriving (Eq)
 data Hash512 = Hash512 { hash512Data :: ByteString } deriving (Eq)
 
--- Hash functions
+-- Classes
+
+class CompareHash a where
+  compare :: a -> ByteString -> Bool
+
+instance CompareHash Hash160 where
+  compare (Hash160 a) b = compareBS a b
+
+instance CompareHash Hash256 where
+  compare (Hash256 a) b = compareBS a b
+
+instance CompareHash Hash512 where
+  compare (Hash512 a) b = compareBS a b
+
+-- Functions
 
 hash160 :: ByteString -> Hash160
 hash160 = Hash160 . (inByteString $ ripemd160 . sha256)
@@ -59,3 +72,8 @@ sha256 = hash
 inByteString :: (ByteArrayAccess a) =>
   (BStrict.ByteString -> a) -> ByteString -> ByteString
 inByteString f = BS.pack . unpack . f . BS.toStrict
+
+compareBS :: ByteString -> ByteString -> Bool
+compareBS a b = isLen && a == b
+  where
+    isLen = BS.length a == BS.length b
