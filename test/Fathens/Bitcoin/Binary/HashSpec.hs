@@ -1,14 +1,12 @@
 module Fathens.Bitcoin.Binary.HashSpec (spec) where
 
-import qualified Data.ByteString.Lazy.Char8    as C8
-import           Data.Maybe                    (fromJust, isJust)
-import qualified Data.Text.Lazy                as T
-import           Fathens.Bitcoin.Binary.Base58
+import qualified Data.ByteString.Lazy.Char8  as C8
+import           Data.Maybe                  (fromJust)
 import           Fathens.Bitcoin.Binary.Hash
 import           Fathens.Bitcoin.Binary.Num
-import           Numeric                       (readHex, showHex)
+import           Numeric                     (readHex, showHex)
 import           Test.Hspec
-import           Test.Hspec.QuickCheck         (prop)
+import           Test.Hspec.QuickCheck       (prop)
 import           Test.QuickCheck
 
 runTest :: IO ()

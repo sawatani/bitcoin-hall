@@ -15,6 +15,9 @@ runTest = hspec spec
 
 spec :: Spec
 spec = do
+  let asBase58 = fromJust . base58 . T.pack
+  let toHex i = (showHex $ fromBigEndian i) ""
+
   describe "base58" $ do
     it "check containing chars" $ do
       (base58 $ T.pack "ablo") `shouldBe` Nothing
@@ -26,14 +29,12 @@ spec = do
         `shouldBe` True
 
   describe "decodeBasee58" $ do
-    it "decode hex" $
-      let b58 = fromJust $ base58 $
-            T.pack "2AF1EDCBxyzwvutsrqponmkjihgfedcbaZYXWVUTSRQPNMLKJHG9876543"
-          int = fromBigEndian $ decodeBase58 b58
-      in
-      (showHex int "") `shouldBe`
-      "45770affd9d5708e474b69220c9dc7f67faed1273a" ++
-      "3ccdd044d489563a9d312869dab70c3521bd88d748"
+    it "decode hex" $ do
+      let src = "2AF1EDCBxyzwvutsrqponmkjihgfedcbaZYXWVUTSRQPNMLKJHG9876543"
+          decode = toHex . decodeBase58 . asBase58
+      decode src `shouldBe` (
+        "45770affd9d5708e474b69220c9dc7f67faed1273a" ++
+        "3ccdd044d489563a9d312869dab70c3521bd88d748")
 
   describe "decode encode, vise versa" $ do
     prop "work keep leading zeros" $
@@ -45,16 +46,14 @@ spec = do
 
   describe "base58check" $ do
     it "decode" $ do
-      let checked = T.pack "1AfMq1PQAhteQ5wffCdX3Yb8VcnJawHL6N"
-          hex = "69fa531ef7022dbdd51b6cfdcfa14493d85f7807"
-          dst = fromJust $ decodeBase58Check $ fromJust $ base58 $ checked
-          int = fromBigEndian dst
-      (showHex int "" )`shouldBe` hex
+      let checked = "1AfMq1PQAhteQ5wffCdX3Yb8VcnJawHL6N"
+          decode = toHex . fromJust . decodeBase58Check . asBase58
+      decode checked `shouldBe` "69fa531ef7022dbdd51b6cfdcfa14493d85f7807"
     it "work vise versa" $ do
-      let checked = T.pack "1AfMq1PQAhteQ5wffCdX3Yb8VcnJawHL6N"
-          dst = fromJust $ decodeBase58Check $ fromJust $ base58 $ checked
-          bc = encodeBase58Check dst
-      (base58Text bc)`shouldBe` checked
+      let checked = "1AfMq1PQAhteQ5wffCdX3Yb8VcnJawHL6N"
+          vv = T.unpack . base58Text . encodeBase58Check .
+            fromJust . decodeBase58Check . asBase58
+      vv checked `shouldBe` checked
 
 prop_Base58String :: String -> Bool
 prop_Base58String s = (base58Text b58') == a
