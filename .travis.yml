@@ -1,0 +1,29 @@
+language: haskell
+cache:
+  directories:
+  - $HOME/.stack/
+  - $HOME/.local/bin/
+  - .stack-work/
+branches:
+  only:
+  - master
+  - develop
+  - /^feature\/\w+/
+env:
+- PATH=~/.local/bin:$PATH
+before_install:
+- if [[ ! -x ~/.local/bin/stack ]]; then
+    travis_retry curl -L https://www.stackage.org/stack/linux-x86_64 |
+    tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack';
+    chmod a+x ~/.local/bin/stack;
+  fi
+- stack --version
+- stack setup
+- stack exec -- ghc --version
+install:
+- stack install --only-dependencies
+script:
+- stack test --coverage
+- stack build
+notifications:
+  email: false
