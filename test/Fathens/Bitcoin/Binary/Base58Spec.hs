@@ -1,10 +1,11 @@
 module Fathens.Bitcoin.Binary.Base58Spec (spec) where
 
+import qualified Data.ByteString.Lazy.Char8    as C8
 import           Data.Maybe                    (fromJust, isJust)
 import qualified Data.Text.Lazy                as T
 import           Fathens.Bitcoin.Binary.Base58
 import           Fathens.Bitcoin.Binary.Num
-import           Numeric                       (showHex)
+import           Numeric                       (readHex, showHex)
 import           Test.Hspec
 import           Test.Hspec.QuickCheck         (prop)
 import           Test.QuickCheck
@@ -41,6 +42,19 @@ spec = do
       prop_Base58String $ (replicate n '1') ++ s
     prop "work on randam" $
       forAll base58chars $ prop_Base58String
+
+  describe "base58check" $ do
+    it "decode" $ do
+      let checked = T.pack "1AfMq1PQAhteQ5wffCdX3Yb8VcnJawHL6N"
+          hex = "69fa531ef7022dbdd51b6cfdcfa14493d85f7807"
+          dst = fromJust $ decodeBase58Check $ fromJust $ base58 $ checked
+          int = fromBigEndian dst
+      (showHex int "" )`shouldBe` hex
+    it "work vise versa" $ do
+      let checked = T.pack "1AfMq1PQAhteQ5wffCdX3Yb8VcnJawHL6N"
+          dst = fromJust $ decodeBase58Check $ fromJust $ base58 $ checked
+          bc = encodeBase58Check dst
+      (base58Text bc)`shouldBe` checked
 
 prop_Base58String :: String -> Bool
 prop_Base58String s = (base58Text b58') == a
