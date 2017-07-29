@@ -49,18 +49,18 @@ spec = do
       let checked = "1AfMq1PQAhteQ5wffCdX3Yb8VcnJawHL6N"
           decode = toHex . fromJust . decodeBase58Check . asBase58
       decode checked `shouldBe` "69fa531ef7022dbdd51b6cfdcfa14493d85f7807"
-    it "work vise versa" $ do
-      let checked = "1AfMq1PQAhteQ5wffCdX3Yb8VcnJawHL6N"
-          vv = T.unpack . base58Text . encodeBase58Check .
-            fromJust . decodeBase58Check . asBase58
-      vv checked `shouldBe` checked
+    prop "work vise versa" $
+      forAll (choose (2^160, 2^512)) $ \i ->
+        i == boomerang i
+        where
+          boomerang = fromBigEndian . fromJust . decodeBase58Check .
+                      encodeBase58Check . toBigEndian
 
 prop_Base58String :: String -> Bool
-prop_Base58String s = (base58Text b58') == a
+prop_Base58String s = boomerang s == s
   where
-    a = T.pack s
-    b58 = fromJust $ base58 a
-    b58' = encodeBase58 $ decodeBase58 b58
+    boomerang = T.unpack . base58Text . encodeBase58 . decodeBase58 .
+                fromJust . base58 . T.pack
 
 base58chars :: Gen String
 base58chars = listOf1 $
