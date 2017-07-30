@@ -11,6 +11,7 @@ module Fathens.Bitcoin.Wallet.Address (
 , appendPayload
 ) where
 
+import           Control.Monad
 import           Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
 import           Data.List
@@ -107,6 +108,25 @@ prefixXPRV True = AddressPrefix {
 
 -- Functions
 
+findBySymbol :: [Bool -> AddressPrefix] -> Text -> Maybe AddressPrefix
+findBySymbol as t = find (flip isMatchSymbol t) pres
+  where
+    pres = as <*> [True, False]
+
+getPayload :: AddressPrefix -> ByteString -> Maybe ByteString
+getPayload p src = do
+  guard $ isMatchPayload p src
+  return $ BS.take net $ BS.drop lenP src
+  where
+    lenP = BS.length $ prefix p
+    lenS = BS.length $ suffix p
+    net = BS.length src - lenP - lenS
+
+appendPayload :: AddressPrefix -> ByteString -> ByteString
+appendPayload p src = BS.concat [prefix p, src, suffix p]
+
+-- Utilities
+
 isMatchSymbol :: AddressPrefix -> Text -> Bool
 isMatchSymbol p t = any isPrefix pres
   where
@@ -118,18 +138,3 @@ isMatchPayload p s = isPre && isSuf
   where
     isPre = BS.isPrefixOf (prefix p) s
     isSuf = BS.isSuffixOf (suffix p) s
-
-findBySymbol :: [Bool -> AddressPrefix] -> Text -> Maybe AddressPrefix
-findBySymbol as t = find (flip isMatchSymbol t) pres
-  where
-    pres = as <*> [True, False]
-
-getPayload :: AddressPrefix -> ByteString -> ByteString
-getPayload p src = BS.take net $ BS.drop lenP src
-  where
-    lenP = BS.length $ prefix p
-    lenS = BS.length $ suffix p
-    net = BS.length src - lenP - lenS
-
-appendPayload :: AddressPrefix -> ByteString -> ByteString
-appendPayload p src = BS.concat [prefix p, src, suffix p]
