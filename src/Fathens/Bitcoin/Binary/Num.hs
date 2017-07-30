@@ -1,6 +1,7 @@
 module Fathens.Bitcoin.Binary.Num (
   fromBigEndian
 , toBigEndian
+, toBigEndianFixed
 ) where
 
 import           Data.Bits            (shiftL, shiftR, (.|.))
@@ -17,3 +18,11 @@ toBigEndian = BS.reverse . BS.unfoldr f
   where
     f 0 = Nothing
     f i = Just (fromInteger i, shiftR i 8)
+
+toBigEndianFixed :: Integer -> Integer -> ByteString
+toBigEndianFixed n = padLeft . toBigEndian
+  where
+    len = fromInteger n
+    padLeft d = BS.replicate (len - BS.length d') 0 `BS.append` d'
+      where
+        d' = BS.take len d
