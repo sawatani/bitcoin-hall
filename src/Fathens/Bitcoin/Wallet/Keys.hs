@@ -8,10 +8,8 @@ module Fathens.Bitcoin.Wallet.Keys (
 ) where
 
 import           Control.Monad
-import qualified Crypto.ECC                     as ECC
-import           Crypto.Error
-import qualified Crypto.PubKey.ECC.Prim         as EP
-import qualified Crypto.PubKey.ECC.Types        as ET
+import           Crypto.PubKey.ECC.Prim         (pointMul)
+import qualified Crypto.PubKey.ECC.Types        as EC
 import           Data.ByteString.Lazy           (ByteString)
 import qualified Data.ByteString.Lazy           as BS
 import           Data.List
@@ -26,12 +24,12 @@ import qualified Fathens.Bitcoin.Wallet.Address as AD
 
 data PrivateKey = PrivateKey {
   prvPrefix :: AD.AddressPrefix
-, prvK      :: KScalar
+, prvK      :: Integer
 } deriving (Show, Eq)
 
 data PublicKey = PublicKey {
   pubPrefix         :: AD.AddressPrefix
-, pubPoint          :: ECPoint
+, pubPoint          :: EC.Point
 , pubShouldCompress :: Bool
 } deriving (Show, Eq)
 
@@ -70,8 +68,8 @@ pubKeyAddress (PublicKey prefix ec comp) = enc ec
 findPrefixPrv :: Base58 -> Maybe AD.AddressPrefix
 findPrefixPrv = AD.findBySymbol [AD.prefixPRV, AD.prefixCPRV] . base58Text
 
-encodePoint :: Bool -> ECPoint -> ByteString
-encodePoint isCompress (ET.Point x y) = encoded
+encodePoint :: Bool -> EC.Point -> ByteString
+encodePoint isCompress (EC.Point x y) = encoded
   where
     encoded | isCompress = z `BS.cons` b256 x
             | otherwise = 4 `BS.cons` b256 x `BS.append` b256 y
@@ -81,16 +79,13 @@ encodePoint isCompress (ET.Point x y) = encoded
 b256 :: Integer -> ByteString
 b256 = toBigEndianFixed 32
 
-k2ec :: KScalar -> ECPoint
+k2ec :: Integer -> EC.Point
 k2ec k = multiply k sec_p256k1_g
 
-multiply :: KScalar -> ECPoint -> ECPoint
-multiply s p = EP.pointMul curve s p
+multiply :: Integer -> EC.Point -> EC.Point
+multiply s p = pointMul curve s p
 
 -- Constants
 
-type KScalar = Integer
-type ECPoint = ET.Point
-
-curve = ET.getCurveByName ET.SEC_p256k1
-sec_p256k1_g = ET.ecc_g $ ET.common_curve $ curve
+curve = EC.getCurveByName EC.SEC_p256k1
+sec_p256k1_g = EC.ecc_g $ EC.common_curve $ curve
