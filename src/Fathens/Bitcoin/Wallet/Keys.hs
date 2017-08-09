@@ -14,7 +14,7 @@ import           Data.ByteString.Lazy           (ByteString)
 import qualified Data.ByteString.Lazy           as BS
 import           Data.List
 import           Data.Maybe
-import           Data.Word                      (Word32)
+import           Data.Word                      (Word32, Word8)
 import           Fathens.Bitcoin.Binary.Base58
 import           Fathens.Bitcoin.Binary.Hash
 import           Fathens.Bitcoin.Binary.Num
@@ -23,15 +23,31 @@ import qualified Fathens.Bitcoin.Wallet.Address as AD
 -- Data
 
 data PrivateKey = PrivateKey {
-  prvPrefix :: AD.AddressPrefix
-, prvK      :: Integer
+  prvPrefix     :: AD.Prefix
+, prvK          :: Integer
+, isCompressing :: Bool
+}
+data PublicKey = PublicKey {
+  pubPrefix  :: AD.Prefix
+, pubPoint   :: EC.Point
+, isCompress :: Bool
+}
+data XPrvKey = XPrvKey PrivateKey ExtendData
+data XPubKey = XPubKey PublicKey ExtendData
+
+data ExtendData = ExtendData {
+  depth             :: Word8
+, parentFingerPrint :: Word32
+, nodeIndex         :: Node
+, chainCode         :: Bits256
 } deriving (Show, Eq)
 
-data PublicKey = PublicKey {
-  pubPrefix         :: AD.AddressPrefix
-, pubPoint          :: EC.Point
-, pubShouldCompress :: Bool
+data Node = Node {
+  isHardened :: Bool
+, index      :: Word32
 } deriving (Show, Eq)
+
+type Bits256 = ByteString
 
 -- Classes
 
@@ -39,34 +55,31 @@ data PublicKey = PublicKey {
 
 readPrvKey :: Base58 -> Maybe PrivateKey
 readPrvKey b58 = do
-  prefix <- findPrefixPrv b58
+  prefix <- AD.findBySymbol b58
+  c <- AD.isCompressing prefix
   d <- decodeBase58Check b58
   payload <- AD.getPayload prefix d
   let k = fromBigEndian payload
-  return $ PrivateKey prefix k
+  return $ PrivateKey prefix k c
 
 prvKeyWIF :: PrivateKey -> Base58
-prvKeyWIF (PrivateKey prefix k) = enc k
+prvKeyWIF (PrivateKey prefix k c) = enc k
   where
     enc = encodeBase58Check . AD.appendPayload prefix . b256
 
 getPublicKey :: PrivateKey -> PublicKey
-getPublicKey (PrivateKey prvPrefix k) = PublicKey {
-  pubPrefix = AD.prefixP2PKH $ AD.isTestnet prvPrefix
-, pubPoint = k2ec k
-, pubShouldCompress = AD.isCompressed prvPrefix
-}
+getPublicKey (PrivateKey prvPrefix k c) = PublicKey p i c
+  where
+    p = AD.PrefixP2PKH $ AD.isTestnet prvPrefix
+    i = k2ec k
 
 pubKeyAddress :: PublicKey -> Base58
-pubKeyAddress (PublicKey prefix ec comp) = enc ec
+pubKeyAddress (PublicKey prefix ec c) = enc ec
   where
     enc = encodeBase58Check . AD.appendPayload prefix .
-          hash160Data . hash160 . encodePoint comp
+          hash160Data . hash160 . encodePoint c
 
 -- Utilities
-
-findPrefixPrv :: Base58 -> Maybe AD.AddressPrefix
-findPrefixPrv = AD.findBySymbol [AD.prefixPRV, AD.prefixCPRV] . base58Text
 
 encodePoint :: Bool -> EC.Point -> ByteString
 encodePoint isCompress (EC.Point x y) = encoded
@@ -76,7 +89,7 @@ encodePoint isCompress (EC.Point x y) = encoded
     z | odd y = 3
       | otherwise = 2
 
-b256 :: Integer -> ByteString
+b256 :: Integer -> Bits256
 b256 = toBigEndianFixed 32
 
 k2ec :: Integer -> EC.Point
