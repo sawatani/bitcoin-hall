@@ -35,8 +35,8 @@ instance Prefix_ Prefix where
   isTestnet (PrefixXPUB b)  = b
   isTestnet (PrefixXPRV b)  = b
 
-  symbols (PrefixP2SH b) | b == True = ["m", "n"]
-                         | b == False = ["1"]
+  symbols (PrefixP2PKH b) | b == True = ["m", "n"]
+                          | b == False = ["1"]
   symbols (PrefixP2SH b) | b == True = ["2"]
                          | b == False = ["3"]
   symbols (PrefixPRV b) | b == True = ["9"]
@@ -48,7 +48,7 @@ instance Prefix_ Prefix where
   symbols (PrefixXPRV b) | b == True = ["tprv"]
                          | b == False = ["xprv"]
 
-  prefix (PrefixP2SH b) | b == True = BS.singleton 0x6f
+  prefix (PrefixP2PKH b) | b == True = BS.singleton 0x6f
                         | b == False = BS.singleton 0x00
   prefix (PrefixP2SH b) | b == True = BS.singleton 0xc4
                         | b == False = BS.singleton 0x05
@@ -62,6 +62,7 @@ instance Prefix_ Prefix where
                         | b == False = BS.pack [0x04, 0x88, 0xad, 0xe4]
 
   suffix (PrefixCPRV b) = BS.singleton 0x01
+  suffix _              = BS.empty
 
 -- Classes
 
@@ -70,7 +71,6 @@ class Prefix_ a where
   symbols :: a -> [String]
   prefix :: a -> ByteString
   suffix :: a -> ByteString
-  suffix _ = BS.empty
 
 -- Functions
 
