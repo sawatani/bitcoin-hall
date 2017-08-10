@@ -35,31 +35,31 @@ instance Prefix_ Prefix where
   isTestnet (PrefixXPUB b)  = b
   isTestnet (PrefixXPRV b)  = b
 
-  symbols (PrefixP2PKH b) | b == True = ["m", "n"]
-                          | b == False = ["1"]
-  symbols (PrefixP2SH b) | b == True = ["2"]
-                         | b == False = ["3"]
-  symbols (PrefixPRV b) | b == True = ["9"]
-                        | b == False = ["5"]
-  symbols (PrefixCPRV b) | b == True = ["c"]
-                         | b == False = ["K", "L"]
-  symbols (PrefixXPUB b) | b == True = ["tpub"]
-                         | b == False = ["xpub"]
-  symbols (PrefixXPRV b) | b == True = ["tprv"]
-                         | b == False = ["xprv"]
+  symbols p@(PrefixP2PKH _) | isTestnet p = ["m", "n"]
+                            | otherwise = ["1"]
+  symbols p@(PrefixP2SH _) | isTestnet p = ["2"]
+                           | otherwise = ["3"]
+  symbols p@(PrefixPRV _) | isTestnet p = ["9"]
+                          | otherwise = ["5"]
+  symbols p@(PrefixCPRV _) | isTestnet p = ["c"]
+                           | otherwise = ["K", "L"]
+  symbols p@(PrefixXPUB _) | isTestnet p = ["tpub"]
+                           | otherwise = ["xpub"]
+  symbols p@(PrefixXPRV _) | isTestnet p = ["tprv"]
+                           | otherwise = ["xprv"]
 
-  prefix (PrefixP2PKH b) | b == True = BS.singleton 0x6f
-                        | b == False = BS.singleton 0x00
-  prefix (PrefixP2SH b) | b == True = BS.singleton 0xc4
-                        | b == False = BS.singleton 0x05
-  prefix (PrefixPRV b) | b == True = BS.singleton 0xef
-                       | b == False = BS.singleton 0x80
-  prefix (PrefixCPRV b) | b == True = BS.singleton 0xef
-                        | b == False = BS.singleton 0x80
-  prefix (PrefixXPUB b) | b == True = BS.pack [0x04, 0x35, 0x87, 0xcf]
-                        | b == False = BS.pack [0x04, 0x88, 0xb2, 0x1e]
-  prefix (PrefixXPRV b) | b == True = BS.pack [0x04, 0x35, 0x83, 0x94]
-                        | b == False = BS.pack [0x04, 0x88, 0xad, 0xe4]
+  prefix p@(PrefixP2PKH _) | isTestnet p = BS.singleton 0x6f
+                           | otherwise = BS.singleton 0x00
+  prefix p@(PrefixP2SH _) | isTestnet p = BS.singleton 0xc4
+                          | otherwise = BS.singleton 0x05
+  prefix p@(PrefixPRV _) | isTestnet p = BS.singleton 0xef
+                         | otherwise = BS.singleton 0x80
+  prefix p@(PrefixCPRV _) | isTestnet p = BS.singleton 0xef
+                          | otherwise = BS.singleton 0x80
+  prefix p@(PrefixXPUB _) | isTestnet p = BS.pack [0x04, 0x35, 0x87, 0xcf]
+                          | otherwise = BS.pack [0x04, 0x88, 0xb2, 0x1e]
+  prefix p@(PrefixXPRV _) | isTestnet p = BS.pack [0x04, 0x35, 0x83, 0x94]
+                          | otherwise = BS.pack [0x04, 0x88, 0xad, 0xe4]
 
   suffix (PrefixCPRV b) = BS.singleton 0x01
   suffix _              = BS.empty
