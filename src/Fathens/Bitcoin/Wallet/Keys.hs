@@ -119,6 +119,7 @@ decodeECPoint bs = do
   where
     h = BS.head bs
     body = BS.tail bs
+    lenBits256 = fromIntegral (lengthOfBytes :: Word256)
     isCompress = h /= 4
     read | isCompress = readCompressed
          | otherwise = readUncompressed
@@ -171,9 +172,6 @@ yFromX isOdd x
         pm z = a * z `mod` eccP
 
 -- Constants
-
-maxBits256 = toInteger (maxBound :: Word256)
-lenBits256 = (256 `div` 8) :: Int64
 
 curve@(EC.CurveFP cp) = EC.getCurveByName EC.SEC_p256k1
 eccP = (fromInteger $ EC.ecc_p cp) :: Word256

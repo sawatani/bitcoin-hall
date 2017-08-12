@@ -14,6 +14,10 @@ import           GHC.Enum
 import           GHC.Real
 import           System.Random
 
+-- Constants
+
+bitsWord256 = 256
+
 -- Data
 
 data Word256 = Word256 Integer deriving (Show, Eq)
@@ -81,15 +85,17 @@ instance Random Word256 where
              in (Word256 x, y)
 
 instance BigEndianFixed Word256 where
+  lengthOfBytes = bitsWord256 `div` 8
   fromBigEndianFixed bs = do
-    guard $ BS.length bs == bytesWord256
+    guard $ BS.length bs == fromIntegral (lengthOfBytes :: Word256)
     return $ fromIntegral $ fromBigEndian bs
 
-  toBigEndianFixed (Word256 i) = writeBigEndianFixed bytesWord256 i
+  toBigEndianFixed (Word256 i) = putBigEndianFixed (lengthOfBytes :: Word256) i
 
 -- Classes
 
 class FiniteBits a => BigEndianFixed a where
+  lengthOfBytes :: a
   fromBigEndianFixed :: ByteString -> Maybe a
   toBigEndianFixed :: a -> ByteString
 
@@ -116,15 +122,10 @@ toBigEndian = BS.reverse . BS.unfoldr f
 
 -- Utilities
 
-writeBigEndianFixed :: (Integral n) => n -> Integer -> ByteString
-writeBigEndianFixed n = padLeft . toBigEndian
+putBigEndianFixed :: (Integral n) => n -> Integer -> ByteString
+putBigEndianFixed n = padLeft . toBigEndian
   where
     len = fromIntegral n
     padLeft d = BS.replicate (len - BS.length d') 0 `BS.append` d'
       where
         d' = BS.take len d
-
--- Constants
-
-bitsWord256 = 256
-bytesWord256 = bitsWord256 `div` 8
