@@ -1,15 +1,23 @@
 module Fathens.Bitcoin.Wallet.Keys (
   PrivateKey
 , PublicKey
-, readPrvKey
+, ECPoint(..)
+, readPrivateKey
 , prvKeyWIF
 , getPublicKey
 , pubKeyAddress
+, encodePoint
+, decodePoint
+, k2ec, yFromX
 ) where
 
 import           Control.Monad
+import qualified Crypto.ECC                     as ECC
+import           Crypto.Error
+import qualified Crypto.PubKey.ECC.P256         as P256
 import           Crypto.PubKey.ECC.Prim         (pointMul)
 import qualified Crypto.PubKey.ECC.Types        as EC
+import           Data.Bits
 import           Data.ByteString.Lazy           (ByteString)
 import qualified Data.ByteString.Lazy           as BS
 import           Data.List
@@ -19,6 +27,7 @@ import           Fathens.Bitcoin.Binary.Base58
 import           Fathens.Bitcoin.Binary.Hash
 import           Fathens.Bitcoin.Binary.Num
 import qualified Fathens.Bitcoin.Wallet.Address as AD
+import           GHC.Int                        (Int64)
 
 -- Data
 
@@ -26,12 +35,17 @@ data PrivateKey = PrivateKey {
   prvPrefix     :: AD.Prefix
 , prvK          :: Integer
 , isCompressing :: Bool
-}
+} deriving (Show, Eq)
 data PublicKey = PublicKey {
   pubPrefix  :: AD.Prefix
-, pubPoint   :: EC.Point
+, pubPoint   :: ECPoint
 , isCompress :: Bool
-}
+} deriving (Show, Eq)
+data ECPoint = ECPoint {
+  ecX :: Integer
+, ecY :: Integer
+} deriving (Show, Eq)
+
 data XPrvKey = XPrvKey PrivateKey ExtendData
 data XPubKey = XPubKey PublicKey ExtendData
 
@@ -53,8 +67,8 @@ type Bits256 = ByteString
 
 -- Functions
 
-readPrvKey :: Base58 -> Maybe PrivateKey
-readPrvKey b58 = do
+readPrivateKey :: Base58 -> Maybe PrivateKey
+readPrivateKey b58 = do
   prefix <- AD.findBySymbol b58
   c <- AD.isCompressing prefix
   d <- decodeBase58Check b58
@@ -71,7 +85,7 @@ getPublicKey :: PrivateKey -> PublicKey
 getPublicKey (PrivateKey prvPrefix k c) = PublicKey p i c
   where
     p = AD.PrefixP2PKH $ AD.isTestnet prvPrefix
-    i = k2ec k
+    i = convertPoint $ k2ec k
 
 pubKeyAddress :: PublicKey -> Base58
 pubKeyAddress (PublicKey prefix ec c) = enc ec
@@ -79,26 +93,70 @@ pubKeyAddress (PublicKey prefix ec c) = enc ec
     enc = encodeBase58Check . AD.appendPayload prefix .
           hash160Data . hash160 . encodePoint c
 
--- Utilities
+decodePoint :: ByteString -> Maybe (Bool, ECPoint)
+decodePoint bs = do
+  guard $ not (BS.null bs)
+  (x, y) <- read
+  return (isCompress, ECPoint x y)
+  where
+    h = BS.head bs
+    body = BS.tail bs
+    isCompress = h /= 4
+    read | isCompress = readCompressed
+         | otherwise = readUncompressed
 
-encodePoint :: Bool -> EC.Point -> ByteString
-encodePoint isCompress (EC.Point x y) = encoded
+    readUncompressed = do
+      guard $ BS.length body >= (lenBits256 * 2)
+      let (x, y) = BS.splitAt lenBits256 bs
+      return (fromBigEndian x, fromBigEndian y)
+
+    readCompressed = do
+      guard (h == 2 || h == 3)
+      guard $ BS.length body >= lenBits256
+      let isOdd = h == 3
+      let x = fromBigEndian body
+      return (x, yFromX isOdd x)
+
+encodePoint :: Bool -> ECPoint -> ByteString
+encodePoint isCompress (ECPoint x y) = encoded
   where
     encoded | isCompress = z `BS.cons` b256 x
             | otherwise = 4 `BS.cons` b256 x `BS.append` b256 y
     z | odd y = 3
       | otherwise = 2
 
+-- Utilities
+
 b256 :: Integer -> Bits256
-b256 = toBigEndianFixed 32
+b256 = toBigEndianFixed lenBits256
+
+convertPoint :: EC.Point -> ECPoint
+convertPoint (EC.Point x y) = ECPoint x y
 
 k2ec :: Integer -> EC.Point
-k2ec k = multiply k sec_p256k1_g
+k2ec = flip multiply eccG
 
 multiply :: Integer -> EC.Point -> EC.Point
 multiply s p = pointMul curve s p
 
+yFromX :: Bool -> Integer -> Integer
+yFromX isOdd x
+  | isOdd == odd y = y
+  | otherwise = eccP - y
+  where
+    v = (7 + pow_mod x 3) `mod` eccP
+    y = pow_mod v $ (eccP + 1) `div` 4
+    pow_mod a b
+      | b == 0 = 1
+      | odd b = pm $ pow_mod a $ b - 1
+      | otherwise = pow_mod (pm a) $ b `div` 2
+      where
+        pm z = a * z `mod` eccP
+
 -- Constants
 
-curve = EC.getCurveByName EC.SEC_p256k1
-sec_p256k1_g = EC.ecc_g $ EC.common_curve $ curve
+lenBits256 = (256 `div` 8) :: Int64
+
+curve@(EC.CurveFP cp) = EC.getCurveByName EC.SEC_p256k1
+eccP = EC.ecc_p cp :: Integer
+eccG = EC.ecc_g $ EC.common_curve $ curve :: EC.Point

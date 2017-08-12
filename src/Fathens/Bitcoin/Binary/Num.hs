@@ -19,10 +19,10 @@ toBigEndian = BS.reverse . BS.unfoldr f
     f 0 = Nothing
     f i = Just (fromInteger i, shiftR i 8)
 
-toBigEndianFixed :: Integer -> Integer -> ByteString
+toBigEndianFixed :: (Integral n) => n -> Integer -> ByteString
 toBigEndianFixed n = padLeft . toBigEndian
   where
-    len = fromInteger n
+    len = fromIntegral n
     padLeft d = BS.replicate (len - BS.length d') 0 `BS.append` d'
       where
         d' = BS.take len d

@@ -1,11 +1,13 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeOperators     #-}
 module Fathens.Bitcoin.Wallet.AddressSpec (spec) where
 
-import qualified Crypto.PubKey.ECC.P256         as P256
-import qualified Crypto.PubKey.ECC.Types        as ET
+import qualified Crypto.PubKey.ECC.Types        as EC
 import qualified Data.ByteString.Lazy           as BS
-import qualified Data.ByteString.Lazy.Char8     as C8
 import           Data.Maybe                     (fromJust)
 import qualified Data.Text.Lazy                 as T
+import           Data.Word                      (Word64)
+import           Debug.Trace
 import           Fathens.Bitcoin.Binary.Base58
 import           Fathens.Bitcoin.Binary.Num
 import           Fathens.Bitcoin.Wallet.Address
@@ -14,6 +16,7 @@ import           Numeric                        (readHex, showHex)
 import           Test.Hspec
 import           Test.Hspec.QuickCheck          (prop)
 import           Test.QuickCheck
+import           Text.Printf
 
 runTest :: IO ()
 runTest = hspec spec
@@ -30,16 +33,32 @@ spec = do
   describe "PrivateKey" $ do
     it "read from WIF" $ do
       let rewrite = T.unpack . base58Text .
-                    prvKeyWIF . fromJust . readPrvKey .
-                    fromJust . base58 . T.pack
+                    prvKeyWIF .
+                    fromJust . readPrivateKey . fromJust . base58 . T.pack
       rewrite prvKey0 `shouldBe` prvKey0
       rewrite prvKey1 `shouldBe` prvKey1
       rewrite prvKey2 `shouldBe` prvKey2
 
     it "derive PublicKey" $ do
       let derive = T.unpack . base58Text .
-                   pubKeyAddress . getPublicKey . fromJust . readPrvKey .
-                   fromJust . base58 . T.pack
+                   pubKeyAddress . getPublicKey .
+                   fromJust . readPrivateKey . fromJust . base58 . T.pack
       derive prvKey0 `shouldBe` pubKey0
       derive prvKey1 `shouldBe` pubKey1
       derive prvKey2 `shouldBe` pubKey2
+
+  describe "yFromX" $ do
+    prop "calculate y from x" $ do
+      let boomerang (EC.Point x y) = EC.Point x $ yFromX (odd y) x
+      forAll anyBits256 $ \k ->
+        let p = k2ec k
+        in
+          trace (show p) (boomerang p) `shouldBe` p
+
+anyBits256 :: Gen Integer
+anyBits256 = do
+  a <- (arbitrary :: Gen Word64) `suchThat` (> 100)
+  b <- (arbitrary :: Gen Word64) `suchThat` (> 100)
+  c <- (arbitrary :: Gen Word64) `suchThat` (> 100)
+  d <- (arbitrary :: Gen Word64) `suchThat` (> 100)
+  return $ toInteger $ a * b * c * d
