@@ -47,13 +47,30 @@ spec = do
       derive prvKey1 `shouldBe` pubKey1
       derive prvKey2 `shouldBe` pubKey2
 
-  describe "yFromX" $ do
-    prop "calculate y from x" $ do
-      let boomerang (EC.Point x y) = EC.Point x $ yFromX (odd y) x
+  describe "ECPoint" $ do
+    let getPoint = getPublicECPoint . fromJust . ecKey
+    let boomerang isCompress =
+          fromJust . decodeECPoint . encodeECPoint isCompress
+    prop "encode length (uncompressed)" $ do
       forAll anyBits256 $ \k ->
-        let p = k2ec k
+        let bs = encodeECPoint False $ getPoint k
         in
-          trace (show p) (boomerang p) `shouldBe` p
+          BS.length bs `shouldBe` (256 `div` 8 * 2 + 1)
+    prop "encode length (compressed)" $ do
+      forAll anyBits256 $ \k ->
+        let bs = encodeECPoint True $ getPoint k
+        in
+          BS.length bs `shouldBe` (256 `div` 8 + 1)
+    prop "decode/encode, vise versa (uncompressed)" $ do
+      forAll anyBits256 $ \k ->
+        let p =  getPoint k
+        in
+          boomerang False p `shouldBe` (False, p)
+    prop "decode/encode, vise versa (compressed)" $ do
+      forAll anyBits256 $ \k ->
+        let p =  getPoint k
+        in
+          trace (show p) (boomerang True p) `shouldBe` (True, p)
 
 anyBits256 :: Gen Integer
 anyBits256 = do

@@ -1,14 +1,16 @@
 module Fathens.Bitcoin.Wallet.Keys (
   PrivateKey
 , PublicKey
-, ECPoint(..)
+, ECKey
+, ECPoint
 , readPrivateKey
 , prvKeyWIF
 , getPublicKey
 , pubKeyAddress
-, encodePoint
-, decodePoint
-, k2ec, yFromX
+, ecKey
+, getPublicECPoint
+, encodeECPoint
+, decodeECPoint
 ) where
 
 import           Control.Monad
@@ -33,17 +35,21 @@ import           GHC.Int                        (Int64)
 
 data PrivateKey = PrivateKey {
   prvPrefix     :: AD.Prefix
-, prvK          :: Integer
+, prvK          :: ECKey
 , isCompressing :: Bool
 } deriving (Show, Eq)
+data ECKey = ECKey {
+  ecK :: Integer
+} deriving (Show, Eq)
+
 data PublicKey = PublicKey {
   pubPrefix  :: AD.Prefix
 , pubPoint   :: ECPoint
 , isCompress :: Bool
 } deriving (Show, Eq)
 data ECPoint = ECPoint {
-  ecX :: Integer
-, ecY :: Integer
+  ecPointX :: Integer
+, ecPointY :: Integer
 } deriving (Show, Eq)
 
 data XPrvKey = XPrvKey PrivateKey ExtendData
@@ -74,10 +80,10 @@ readPrivateKey b58 = do
   d <- decodeBase58Check b58
   payload <- AD.getPayload prefix d
   let k = fromBigEndian payload
-  return $ PrivateKey prefix k c
+  return $ PrivateKey prefix (ECKey k) c
 
 prvKeyWIF :: PrivateKey -> Base58
-prvKeyWIF (PrivateKey prefix k c) = enc k
+prvKeyWIF (PrivateKey prefix (ECKey k) c) = enc k
   where
     enc = encodeBase58Check . AD.appendPayload prefix . b256
 
@@ -85,16 +91,24 @@ getPublicKey :: PrivateKey -> PublicKey
 getPublicKey (PrivateKey prvPrefix k c) = PublicKey p i c
   where
     p = AD.PrefixP2PKH $ AD.isTestnet prvPrefix
-    i = convertPoint $ k2ec k
+    i = getPublicECPoint k
 
 pubKeyAddress :: PublicKey -> Base58
 pubKeyAddress (PublicKey prefix ec c) = enc ec
   where
     enc = encodeBase58Check . AD.appendPayload prefix .
-          hash160Data . hash160 . encodePoint c
+          hash160Data . hash160 . encodeECPoint c
 
-decodePoint :: ByteString -> Maybe (Bool, ECPoint)
-decodePoint bs = do
+ecKey :: Integer -> Maybe ECKey
+ecKey k = do
+  guard $ 0 < k && k <= maxBits256
+  return $ ECKey k
+
+getPublicECPoint :: ECKey -> ECPoint
+getPublicECPoint (ECKey k) = convertPoint $ k2ec k
+
+decodeECPoint :: ByteString -> Maybe (Bool, ECPoint)
+decodeECPoint bs = do
   guard $ not (BS.null bs)
   (x, y) <- read
   return (isCompress, ECPoint x y)
@@ -107,7 +121,7 @@ decodePoint bs = do
 
     readUncompressed = do
       guard $ BS.length body >= (lenBits256 * 2)
-      let (x, y) = BS.splitAt lenBits256 bs
+      let (x, y) = BS.splitAt lenBits256 body
       return (fromBigEndian x, fromBigEndian y)
 
     readCompressed = do
@@ -117,8 +131,8 @@ decodePoint bs = do
       let x = fromBigEndian body
       return (x, yFromX isOdd x)
 
-encodePoint :: Bool -> ECPoint -> ByteString
-encodePoint isCompress (ECPoint x y) = encoded
+encodeECPoint :: Bool -> ECPoint -> ByteString
+encodeECPoint isCompress (ECPoint x y) = encoded
   where
     encoded | isCompress = z `BS.cons` b256 x
             | otherwise = 4 `BS.cons` b256 x `BS.append` b256 y
@@ -155,6 +169,7 @@ yFromX isOdd x
 
 -- Constants
 
+maxBits256 = 2^256 - 1 :: Integer
 lenBits256 = (256 `div` 8) :: Int64
 
 curve@(EC.CurveFP cp) = EC.getCurveByName EC.SEC_p256k1
