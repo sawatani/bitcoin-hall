@@ -3,6 +3,7 @@ module Fathens.Bitcoin.Wallet.Keys (
 , PublicKey
 , ECKey
 , ECPoint
+, maxECC_K
 , readPrivateKey
 , prvKeyWIF
 , getPublicKey
@@ -33,13 +34,16 @@ import           GHC.Int                        (Int64)
 
 -- Data
 
+maxECC_K :: Word256
+maxECC_K = fromInteger $ EC.ecc_n $ EC.common_curve $ curve
+
 data PrivateKey = PrivateKey {
   prvPrefix     :: AD.Prefix
 , prvK          :: ECKey
 , isCompressing :: Bool
 } deriving (Show, Eq)
 data ECKey = ECKey {
-  ecK :: Integer
+  ecK :: Word256
 } deriving (Show, Eq)
 
 data PublicKey = PublicKey {
@@ -48,8 +52,8 @@ data PublicKey = PublicKey {
 , isCompress :: Bool
 } deriving (Show, Eq)
 data ECPoint = ECPoint {
-  ecPointX :: Integer
-, ecPointY :: Integer
+  ecPointX :: Word256
+, ecPointY :: Word256
 } deriving (Show, Eq)
 
 data XPrvKey = XPrvKey PrivateKey ExtendData
@@ -59,7 +63,7 @@ data ExtendData = ExtendData {
   depth             :: Word8
 , parentFingerPrint :: Word32
 , nodeIndex         :: Node
-, chainCode         :: Bits256
+, chainCode         :: Word256
 } deriving (Show, Eq)
 
 data Node = Node {
@@ -67,11 +71,11 @@ data Node = Node {
 , index      :: Word32
 } deriving (Show, Eq)
 
-type Bits256 = ByteString
-
 -- Classes
 
 -- Functions
+
+-- fromHDSeed :: Word256 -> Maybe HDPrivate
 
 readPrivateKey :: Base58 -> Maybe PrivateKey
 readPrivateKey b58 = do
@@ -79,13 +83,13 @@ readPrivateKey b58 = do
   c <- AD.isCompressing prefix
   d <- decodeBase58Check b58
   payload <- AD.getPayload prefix d
-  let k = fromBigEndian payload
+  k <- fromBigEndianFixed payload
   return $ PrivateKey prefix (ECKey k) c
 
 prvKeyWIF :: PrivateKey -> Base58
 prvKeyWIF (PrivateKey prefix (ECKey k) c) = enc k
   where
-    enc = encodeBase58Check . AD.appendPayload prefix . b256
+    enc = encodeBase58Check . AD.appendPayload prefix . toBigEndianFixed
 
 getPublicKey :: PrivateKey -> PublicKey
 getPublicKey (PrivateKey prvPrefix k c) = PublicKey p i c
@@ -99,13 +103,13 @@ pubKeyAddress (PublicKey prefix ec c) = enc ec
     enc = encodeBase58Check . AD.appendPayload prefix .
           hash160Data . hash160 . encodeECPoint c
 
-ecKey :: Integer -> Maybe ECKey
+ecKey :: Word256 -> Maybe ECKey
 ecKey k = do
-  guard $ 0 < k && k <= maxBits256
+  guard $ 0 < k && k <= maxECC_K
   return $ ECKey k
 
 getPublicECPoint :: ECKey -> ECPoint
-getPublicECPoint (ECKey k) = convertPoint $ k2ec k
+getPublicECPoint (ECKey k) = convertPoint $ multiply (toInteger k) eccG
 
 decodeECPoint :: ByteString -> Maybe (Bool, ECPoint)
 decodeECPoint bs = do
@@ -121,39 +125,38 @@ decodeECPoint bs = do
 
     readUncompressed = do
       guard $ BS.length body >= (lenBits256 * 2)
-      let (x, y) = BS.splitAt lenBits256 body
-      return (fromBigEndian x, fromBigEndian y)
+      let (xb, yb) = BS.splitAt lenBits256 body
+      x <- fromBigEndianFixed xb
+      y <- fromBigEndianFixed yb
+      return (x, y)
 
     readCompressed = do
       guard (h == 2 || h == 3)
       guard $ BS.length body >= lenBits256
       let isOdd = h == 3
-      let x = fromBigEndian body
+      x <- fromBigEndianFixed body
       return (x, yFromX isOdd x)
 
 encodeECPoint :: Bool -> ECPoint -> ByteString
 encodeECPoint isCompress (ECPoint x y) = encoded
   where
-    encoded | isCompress = z `BS.cons` b256 x
-            | otherwise = 4 `BS.cons` b256 x `BS.append` b256 y
+    encoded | isCompress = z `BS.cons` toBigEndianFixed x
+            | otherwise = 4 `BS.cons`
+                          toBigEndianFixed x `BS.append` toBigEndianFixed y
     z | odd y = 3
       | otherwise = 2
 
 -- Utilities
 
-b256 :: Integer -> Bits256
-b256 = toBigEndianFixed lenBits256
-
 convertPoint :: EC.Point -> ECPoint
-convertPoint (EC.Point x y) = ECPoint x y
-
-k2ec :: Integer -> EC.Point
-k2ec = flip multiply eccG
+convertPoint (EC.Point x y) = ECPoint (justWord256 x) (justWord256 y)
+  where
+    justWord256 = fromJust . toWord256
 
 multiply :: Integer -> EC.Point -> EC.Point
 multiply s p = pointMul curve s p
 
-yFromX :: Bool -> Integer -> Integer
+yFromX :: Bool -> Word256 -> Word256
 yFromX isOdd x
   | isOdd == odd y = y
   | otherwise = eccP - y
@@ -169,9 +172,9 @@ yFromX isOdd x
 
 -- Constants
 
-maxBits256 = 2^256 - 1 :: Integer
+maxBits256 = toInteger (maxBound :: Word256)
 lenBits256 = (256 `div` 8) :: Int64
 
 curve@(EC.CurveFP cp) = EC.getCurveByName EC.SEC_p256k1
-eccP = EC.ecc_p cp :: Integer
+eccP = (fromInteger $ EC.ecc_p cp) :: Word256
 eccG = EC.ecc_g $ EC.common_curve $ curve :: EC.Point

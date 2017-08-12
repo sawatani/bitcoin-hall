@@ -1,6 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeOperators     #-}
-module Fathens.Bitcoin.Wallet.AddressSpec (spec) where
+module Fathens.Bitcoin.Wallet.KeysSpec (spec) where
 
 import qualified Crypto.PubKey.ECC.Types        as EC
 import qualified Data.ByteString.Lazy           as BS
@@ -72,10 +70,5 @@ spec = do
         in
           trace (show p) (boomerang True p) `shouldBe` (True, p)
 
-anyBits256 :: Gen Integer
-anyBits256 = do
-  a <- (arbitrary :: Gen Word64) `suchThat` (> 100)
-  b <- (arbitrary :: Gen Word64) `suchThat` (> 100)
-  c <- (arbitrary :: Gen Word64) `suchThat` (> 100)
-  d <- (arbitrary :: Gen Word64) `suchThat` (> 100)
-  return $ toInteger $ a * b * c * d
+anyBits256 :: Gen Word256
+anyBits256 = choose (minBound, maxECC_K)
