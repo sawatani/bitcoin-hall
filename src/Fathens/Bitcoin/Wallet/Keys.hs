@@ -119,21 +119,18 @@ decodeECPoint bs = do
   where
     h = BS.head bs
     body = BS.tail bs
-    lenBits256 = fromIntegral (lengthOfBytes :: Word256)
     isCompress = h /= 4
     read | isCompress = readCompressed
          | otherwise = readUncompressed
 
     readUncompressed = do
-      guard $ BS.length body >= (lenBits256 * 2)
-      let (xb, yb) = BS.splitAt lenBits256 body
+      let (xb, yb) = BS.splitAt (BS.length body `div` 2) body
       x <- fromBigEndianFixed xb
       y <- fromBigEndianFixed yb
       return (x, y)
 
     readCompressed = do
       guard (h == 2 || h == 3)
-      guard $ BS.length body >= lenBits256
       let isOdd = h == 3
       x <- fromBigEndianFixed body
       return (x, yFromX isOdd x)
