@@ -1,5 +1,7 @@
 module Fathens.Bitcoin.Binary.Base58 (
   Base58(base58Text)
+, ReadFromBase58(..)
+, WriteToBase58(..)
 , base58
 , encodeBase58
 , decodeBase58
@@ -30,6 +32,14 @@ chars :: [Char]
 chars = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
 data Base58 = Base58 { base58Text :: Text } deriving (Show, Eq)
+
+-- Classes
+
+class WriteToBase58 a where
+  toBase58 :: a -> Base58
+
+class ReadFromBase58 a where
+  fromBase58 :: Base58-> Maybe a
 
 -- Functions
 

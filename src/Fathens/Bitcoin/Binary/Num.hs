@@ -4,12 +4,14 @@ module Fathens.Bitcoin.Binary.Num (
 , toWord256
 , fromBigEndian
 , toBigEndian
+, putBigEndianFixed
 ) where
 
 import           Control.Monad
 import           Data.Bits
 import           Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
+import           Data.Word            (Word32)
 import           GHC.Enum
 import           GHC.Real
 import           System.Random
@@ -92,6 +94,14 @@ instance BigEndianFixed Word256 where
 
   toBigEndianFixed (Word256 i) = putBigEndianFixed (lengthOfBytes :: Word256) i
 
+instance BigEndianFixed Word32 where
+  lengthOfBytes = 32 `div` 8
+  fromBigEndianFixed bs = do
+    guard $ BS.length bs == fromIntegral (lengthOfBytes :: Word32)
+    return $ fromIntegral $ fromBigEndian bs
+
+  toBigEndianFixed i = putBigEndianFixed (lengthOfBytes :: Word32) $ toInteger i
+
 -- Classes
 
 class FiniteBits a => BigEndianFixed a where
@@ -119,8 +129,6 @@ toBigEndian = BS.reverse . BS.unfoldr f
   where
     f 0 = Nothing
     f i = Just (fromInteger i, shiftR i 8)
-
--- Utilities
 
 putBigEndianFixed :: (Integral n) => n -> Integer -> ByteString
 putBigEndianFixed n = padLeft . toBigEndian
