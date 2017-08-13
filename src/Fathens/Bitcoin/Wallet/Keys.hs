@@ -159,12 +159,12 @@ yFromX isOdd x
   | isOdd == odd y = y
   | otherwise = eccP - y
   where
-    v = (7 + pow_mod x 3) `mod` eccP
-    y = pow_mod v $ (eccP + 1) `div` 4
-    pow_mod a b
+    v = (7 + x `pw` 3) `mod` eccP
+    y = v `pw` ((eccP + 1) `div` 4)
+    pw a b
       | b == 0 = 1
-      | odd b = pm $ pow_mod a $ b - 1
-      | otherwise = pow_mod (pm a) $ b `div` 2
+      | odd b = pm $ a `pw` (b - 1)
+      | otherwise = pm a `pw` (b `div` 2)
       where
         pm z = a * z `mod` eccP
 
