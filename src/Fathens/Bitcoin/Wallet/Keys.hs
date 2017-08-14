@@ -70,11 +70,26 @@ data HDNode
 data HDNodeNormal = HDNodeNormal Word32 deriving (Show, Eq)
 data HDNodeHardened = HDNodeHardened Word32 deriving (Show, Eq)
 
+decodeExtendData :: ByteString -> Maybe (ExtendData, ByteString)
+decodeExtendData payload = do
+  let d: f: i: c: o: [] = chopBS [1, 4, 4, 32] payload
+  (depth, _) <- BS.uncons d
+  fingerprint <- fromBigEndianFixed f
+  index <- fromBigEndianFixed i
+  chain <- fromBigEndianFixed c
+  return $ (ExtendData depth fingerprint index chain, o)
+
+encodeExtendData :: ExtendData -> ByteString
+encodeExtendData (ExtendData d f i c) = d `BS.cons`
+  toBigEndianFixed f `BS.append`
+  toBigEndianFixed i `BS.append`
+  toBigEndianFixed c
+
 -- Instances
 
 instance ReadFromBase58 PrvKey where
   fromBase58 b58 = do
-    prefix <- findBySymbol b58
+    prefix <- findBySymbol [PrefixPRV, PrefixCPRV] b58
     c <- isCompressing prefix
     d <- decodeBase58Check b58
     payload <- getPayload prefix d
@@ -92,6 +107,38 @@ instance WriteToBase58 PubKey where
       enc = encodeBase58Check . appendPayload prefix .
             hash160Data . hash160 . encodeECPoint c
 
+instance ReadFromBase58 XPrvKey where
+  fromBase58 b58 = do
+    prefix <- findBySymbol [PrefixXPRV] b58
+    d <- decodeBase58Check b58
+    payload <- getPayload prefix d
+    (ed, key) <- decodeExtendData payload
+    (s, v) <- BS.uncons key
+    guard $ s == 0
+    k <- ecKey =<< fromBigEndianFixed v
+    return $ XPrvKey prefix $ HDPrvKey ed k
+
+instance WriteToBase58 XPrvKey where
+  toBase58 (XPrvKey prefix hd) = encodeBase58Check $ appendPayload prefix d
+    where
+      HDPrvKey ed (ECKey k) = hd
+      d = encodeExtendData ed `BS.append` (0 `BS.cons` toBigEndianFixed k)
+
+instance ReadFromBase58 XPubKey where
+  fromBase58 b58 = do
+    prefix <- findBySymbol [PrefixXPUB] b58
+    d <- decodeBase58Check b58
+    payload <- getPayload prefix d
+    (ed, key) <- decodeExtendData payload
+    (_, p) <- decodeECPoint key
+    return $ XPubKey prefix $ HDPubKey ed p
+
+instance WriteToBase58 XPubKey where
+  toBase58 (XPubKey prefix hd) = encodeBase58Check $ appendPayload prefix d
+    where
+      HDPubKey ed ecPoint = hd
+      d = encodeExtendData ed `BS.append` encodeECPoint True ecPoint
+
 instance PrivateKey PrvKey where
   type PublicKeyType PrvKey = PubKey
   toPublicKey (PrvKey prvPrefix k c) = PubKey p i c
@@ -101,7 +148,7 @@ instance PrivateKey PrvKey where
 
 instance PrivateKey ECKey where
   type PublicKeyType ECKey = ECPoint
-  toPublicKey (ECKey k) = k @* eccG
+  toPublicKey (ECKey k) = toPoint $ k @* eccG
 
 instance PublicKey PubKey where
 
@@ -158,7 +205,7 @@ instance ExtendPublicKey HDPubKey where
     (HDNodeNormal index) = HDPubKey childData childPoint
     where
       childData = ExtendData (depth + 1) fingerprint index childChain
-      childPoint = l @* eccG @+ ecPoint
+      childPoint = toPoint $ l @* eccG @+ fromPoint ecPoint
 
       fingerprint = mkFingerprint ecPoint
 
@@ -262,6 +309,12 @@ encodeECPoint isCompress (ECPoint x y) = encoded
 splitHalf :: ByteString -> (ByteString, ByteString)
 splitHalf bs = BS.splitAt (BS.length bs `div` 2) bs
 
+chopBS :: [Int64] -> ByteString -> [ByteString]
+chopBS [] bs = [bs]
+chopBS (n : ns) bs = h : chopBS ns t
+  where
+    (h, t) = BS.splitAt n bs
+
 mkFingerprint :: ECPoint -> Word32
 mkFingerprint = read4 . hash160Data . hash160 . encodeECPoint True
   where
@@ -275,11 +328,11 @@ toPoint (EC.Point x y) = ECPoint (justWord256 x) (justWord256 y)
 fromPoint :: ECPoint -> EC.Point
 fromPoint (ECPoint x y) = EC.Point (toInteger x) (toInteger y)
 
-(@*) :: Word256 -> ECPoint -> ECPoint
-(@*) s p = toPoint $ pointMul curve (toInteger s) (fromPoint p)
+(@*) :: Word256 -> EC.Point -> EC.Point
+(@*) s p = pointMul curve (toInteger s) p
 
-(@+) :: ECPoint -> ECPoint -> ECPoint
-(@+) a b = toPoint $ pointAdd curve (fromPoint a) (fromPoint b)
+(@+) :: EC.Point -> EC.Point -> EC.Point
+(@+) a b = pointAdd curve a b
 
 yFromX :: Bool -> Word256 -> Word256
 yFromX isOdd x
@@ -299,6 +352,6 @@ yFromX isOdd x
 
 curve@(EC.CurveFP cp) = EC.getCurveByName EC.SEC_p256k1
 eccP = (fromInteger $ EC.ecc_p cp) :: Word256
-eccG = toPoint $ EC.ecc_g $ EC.common_curve $ curve :: ECPoint
+eccG = EC.ecc_g $ EC.common_curve $ curve :: EC.Point
 
 masterSeed = C8.pack "Bitcoin seed" :: ByteString

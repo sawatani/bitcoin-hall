@@ -79,18 +79,10 @@ isCompressing (PrefixPRV _)  = Just False
 isCompressing (PrefixCPRV _) = Just True
 isCompressing _              = Nothing
 
-findBySymbol :: Base58 -> Maybe Prefix
-findBySymbol b = find (flip isMatchSymbol t) pres
+findBySymbol :: [Bool -> Prefix] -> Base58 -> Maybe Prefix
+findBySymbol s b = find (flip isMatchSymbol t) pres
   where
     t = base58Text b
-    s = [
-        PrefixP2PKH
-      , PrefixP2SH
-      , PrefixPRV
-      , PrefixCPRV
-      , PrefixXPRV
-      , PrefixXPUB
-      ]
     pres = s <*> [True, False]
 
 getPayload :: Prefix_ a => a -> ByteString -> Maybe ByteString

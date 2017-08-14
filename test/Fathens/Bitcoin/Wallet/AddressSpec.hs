@@ -16,7 +16,14 @@ runTest = hspec spec
 
 spec :: Spec
 spec = do
-  let byList = findBySymbol . fromJust . base58 . T.pack
+  let all = [PrefixP2PKH
+            , PrefixP2SH
+            , PrefixPRV
+            , PrefixCPRV
+            , PrefixXPRV
+            , PrefixXPUB
+            ]
+  let byList = findBySymbol all . fromJust . base58 . T.pack
   let body = [1, 2, 3]
 
   describe "findBySymbol and appendPayload" $ do
@@ -105,3 +112,4 @@ spec = do
       load "x4jasanbsdg" body `shouldBe` Nothing
     it "unmatch body" $ do
       load "14jasanbsdg" body `shouldBe` Nothing
+
