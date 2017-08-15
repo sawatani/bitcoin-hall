@@ -6,8 +6,23 @@ module Fathens.Bitcoin.Wallet.Keys (
 , ECPoint
 , PublicKey(..)
 , PrivateKey(..)
+, XPrvKey
+, HDPrvKey
+, XPubKey
+, HDPubKey
 , ExtendPublicKey(..)
 , ExtendPrivateKey(..)
+, HDNode'
+, HDNode(..)
+, HDNodeNormal
+, HDNodeHardened
+, normalHDNode
+, hardenedHDNode
+, exKeyFromSeed
+, toPrvKey
+, toPubKey
+, toXPrvKey
+, toXPubKey
 , maxECC_K
 , ecKey
 , encodeECPoint
@@ -53,39 +68,47 @@ data ECPoint = ECPoint Word256 Word256 deriving (Show, Eq)
 data XPrvKey = XPrvKey Prefix HDPrvKey
 data HDPrvKey = HDPrvKey ExtendData ECKey
 
-data HDPubKey = HDPubKey ExtendData ECPoint
 data XPubKey = XPubKey Prefix HDPubKey
+data HDPubKey = HDPubKey ExtendData ECPoint
 
 data ExtendData = ExtendData {
   depth             :: Word8
 , parentFingerPrint :: Word32
-, nodeIndex         :: Word32
+, node              :: HDNode'
 , chainCode         :: Word256
 } deriving (Show, Eq)
 
-data HDNode
-  = HDNodeNormal_ HDNodeNormal
-  | HDNodeHardened_ HDNodeHardened
-  deriving (Show, Eq)
-data HDNodeNormal = HDNodeNormal Word32 deriving (Show, Eq)
-data HDNodeHardened = HDNodeHardened Word32 deriving (Show, Eq)
-
-decodeExtendData :: ByteString -> Maybe (ExtendData, ByteString)
-decodeExtendData payload = do
-  let d: f: i: c: o: [] = chopBS [1, 4, 4, 32] payload
-  (depth, _) <- BS.uncons d
-  fingerprint <- fromBigEndianFixed f
-  index <- fromBigEndianFixed i
-  chain <- fromBigEndianFixed c
-  return $ (ExtendData depth fingerprint index chain, o)
-
-encodeExtendData :: ExtendData -> ByteString
-encodeExtendData (ExtendData d f i c) = d `BS.cons`
-  toBigEndianFixed f `BS.append`
-  toBigEndianFixed i `BS.append`
-  toBigEndianFixed c
+newtype HDNode' = HDNode' Word32 deriving (Show, Eq)
+newtype HDNodeNormal = HDNodeNormal Word32 deriving (Show, Eq)
+newtype HDNodeHardened = HDNodeHardened Word32 deriving (Show, Eq)
 
 -- Instances
+
+instance HDNode HDNode' where
+  isHardened (HDNode' v) = 0 /= (v .&. flagHardened)
+  encodeHDNode (HDNode' index) = toBigEndianFixed index
+  decodeHDNode bs = do
+    (v, o) <- decodeBigEndian bs
+    return (HDNode' v, o)
+  flagedHDNode a = a
+
+instance HDNode HDNodeNormal where
+  isHardened _ = False
+  encodeHDNode = encodeHDNode . flagedHDNode
+  decodeHDNode bs = do
+    (n@(HDNode' v), o) <- decodeHDNode bs
+    guard $ not (isHardened n)
+    return (HDNodeNormal v, o)
+  flagedHDNode (HDNodeNormal index) = HDNode' index
+
+instance HDNode HDNodeHardened where
+  isHardened _ = True
+  encodeHDNode = encodeHDNode . flagedHDNode
+  decodeHDNode bs = do
+    (n@(HDNode' v), o) <- decodeHDNode bs
+    guard $ isHardened n
+    return (HDNodeHardened $ v `xor` flagHardened, o)
+  flagedHDNode (HDNodeHardened v) = HDNode' $ v .|. flagHardened
 
 instance ReadFromBase58 PrvKey where
   fromBase58 b58 = do
@@ -158,32 +181,31 @@ instance ExtendPrivateKey HDPrvKey where
   type InnerPrivateKeyType HDPrvKey = ECKey
   type ExtendPublicKeyType HDPrvKey = HDPubKey
 
-  getPrivateKey (HDPrvKey _ ecKey) = ecKey
+  getPrivateKey (HDPrvKey _ ec) = ec
 
-  toExtendPublicKey (HDPrvKey ed ecKey) = HDPubKey ed $ toPublicKey ecKey
+  toExtendPublicKey (HDPrvKey ed ec) = HDPubKey ed $ toPublicKey ec
 
-  derivePrivateKey (HDPrvKey (ExtendData depth _ _ chain) ecKey@(ECKey k)) node
-    = HDPrvKey childData childKey
+  derivePrivateKey (HDPrvKey ed ec) node = HDPrvKey childData childKey
     where
-      childData = ExtendData (depth + 1) fingerprint index childChain
+      ECKey k = ec
+      ExtendData depth _ _ chain = ed
+
+      childData = ExtendData (depth + 1) fingerprint
+                  (flagedHDNode node) childChain
       childKey = ECKey $ fromInteger $
         (toInteger k) + (toInteger l) `mod` toInteger maxECC_K
 
-      fingerprint = mkFingerprint $ toPublicKey ecKey
+      fingerprint = mkFingerprint $ toPublicKey ec
 
-      (l, childChain) = hdHash chain index body
-      (index, body) = hashBody node
-
-      hashBody (HDNodeNormal_ (HDNodeNormal index)) =
-        (index, encodeECPoint True $ toPublicKey ecKey)
-      hashBody (HDNodeHardened_ (HDNodeHardened index)) =
-        (index, 0 `BS.cons` toBigEndianFixed k)
+      (l, childChain) = hdHash chain node body
+      body | isHardened node = 0 `BS.cons` toBigEndianFixed k
+           | otherwise = encodeECPoint True $ toPublicKey ec
 
 instance ExtendPrivateKey XPrvKey where
   type InnerPrivateKeyType XPrvKey = PrvKey
   type ExtendPublicKeyType XPrvKey = XPubKey
 
-  getPrivateKey (XPrvKey myPrefix (HDPrvKey _ ecKey)) = PrvKey prefix ecKey True
+  getPrivateKey (XPrvKey myPrefix (HDPrvKey _ ec)) = PrvKey prefix ec True
     where
       prefix = PrefixCPRV $ isTestnet myPrefix
 
@@ -201,21 +223,21 @@ instance ExtendPublicKey HDPubKey where
 
   getPublicKey (HDPubKey _ p) = p
 
-  derivePublicKey (HDPubKey (ExtendData depth _ _ chain) ecPoint)
-    (HDNodeNormal index) = HDPubKey childData childPoint
+  derivePublicKey (HDPubKey (ExtendData depth _ _ chain) ec) node
+    = HDPubKey childData childPoint
     where
-      childData = ExtendData (depth + 1) fingerprint index childChain
-      childPoint = toPoint $ l @* eccG @+ fromPoint ecPoint
+      childData = ExtendData (depth + 1) fingerprint
+                  (flagedHDNode node) childChain
+      childPoint = toPoint $ l @* eccG @+ fromPoint ec
 
-      fingerprint = mkFingerprint ecPoint
+      fingerprint = mkFingerprint ec
 
-      (l, childChain) = hdHash chain index $ encodeECPoint True ecPoint
+      (l, childChain) = hdHash chain node $ encodeECPoint True ec
 
 instance ExtendPublicKey XPubKey where
   type InnerPublicKeyType XPubKey = PubKey
 
-  getPublicKey (XPubKey myPrefix (HDPubKey _ ecPoint)) =
-    PubKey prefix ecPoint True
+  getPublicKey (XPubKey myPrefix (HDPubKey _ ec)) = PubKey prefix ec True
     where
       prefix = PrefixP2PKH $ isTestnet myPrefix
 
@@ -223,12 +245,11 @@ instance ExtendPublicKey XPubKey where
     where
       child = derivePublicKey hd node
 
-hdHash :: Word256 -> Word32 -> ByteString -> (Word256, Word256)
-hdHash chain index body = (toNum l, toNum r)
+hdHash :: HDNode n => Word256 -> n -> ByteString -> (Word256, Word256)
+hdHash chain node body = (l, r)
   where
-    (l, r) = splitHalf $ hash512Data $ hmac512 (toBigEndianFixed chain) $
-        body `BS.append` toBigEndianFixed index
-    toNum = fromJust . fromBigEndianFixed
+    (l, r) = fromJust $ splitHalf $ hash512Data $
+      hmac512 (toBigEndianFixed chain) $ body `BS.append` encodeHDNode node
 
 -- Classes
 
@@ -243,14 +264,33 @@ class ExtendPrivateKey a where
   type ExtendPublicKeyType a :: *
   getPrivateKey :: a -> (InnerPrivateKeyType a)
   toExtendPublicKey :: a -> (ExtendPublicKeyType a)
-  derivePrivateKey :: a -> HDNode -> a
+  derivePrivateKey :: HDNode n => a -> n -> a
 
 class ExtendPublicKey a where
   type InnerPublicKeyType a :: *
   getPublicKey :: a -> (InnerPublicKeyType a)
   derivePublicKey :: a -> HDNodeNormal -> a
 
+class HDNode a where
+  isHardened :: a -> Bool
+  encodeHDNode :: a -> ByteString
+  decodeHDNode :: ByteString -> Maybe (a, ByteString)
+  flagedHDNode :: a -> HDNode'
+
 -- Functions
+
+toPrvKey :: Bool -> Bool -> ECKey -> PrvKey
+toPrvKey isTest isCompress k | isCompress = PrvKey (PrefixCPRV isTest) k True
+                             | otherwise = PrvKey (PrefixPRV isTest) k False
+
+toPubKey :: Bool -> Bool -> ECPoint -> PubKey
+toPubKey isTest isCompress p = PubKey (PrefixP2PKH isTest) p isCompress
+
+toXPrvKey :: Bool -> HDPrvKey -> XPrvKey
+toXPrvKey isTest prv = XPrvKey (PrefixXPRV isTest) prv
+
+toXPubKey :: Bool -> HDPubKey -> XPubKey
+toXPubKey isTest prv = XPubKey (PrefixXPUB isTest) prv
 
 exKeyFromSeed :: Integer -> Maybe HDPrvKey
 exKeyFromSeed i | i < 2^128 = mkMaster 128
@@ -258,12 +298,11 @@ exKeyFromSeed i | i < 2^128 = mkMaster 128
                 | i < 2^512 = mkMaster 512
                 | otherwise = Nothing
   where
-    mkMaster n = fmap (HDPrvKey d) $ ecKey $ toNum l
+    mkMaster n = fmap (HDPrvKey d) $ ecKey l
       where
-        d = ExtendData 0 0 0 $ toNum r
-        (l, r) = splitHalf $ hash512Data $ hmac512 masterSeed $
+        d = ExtendData 0 0 (HDNode' 0) r
+        (l, r) = fromJust $ splitHalf $ hash512Data $ hmac512 masterSeed $
                  putBigEndianFixed (n `div` 8) i
-        toNum = fromJust . fromBigEndianFixed
 
 ecKey :: Word256 -> Maybe ECKey
 ecKey k = do
@@ -283,9 +322,7 @@ decodeECPoint bs = do
          | otherwise = readUncompressed
 
     readUncompressed = do
-      let (xb, yb) = splitHalf body
-      x <- fromBigEndianFixed xb
-      y <- fromBigEndianFixed yb
+      (x, y) <- splitHalf body
       guard $ y == yFromX (odd y) x
       return (x, y)
 
@@ -304,16 +341,47 @@ encodeECPoint isCompress (ECPoint x y) = encoded
     z | odd y = 3
       | otherwise = 2
 
+normalHDNode :: Word32 -> Maybe HDNodeNormal
+normalHDNode index = do
+  guard $ index < 2^31
+  return $ HDNodeNormal index
+
+hardenedHDNode :: Word32 -> Maybe HDNodeHardened
+hardenedHDNode index = do
+  guard $ index < 2^31
+  return $ HDNodeHardened index
+
 -- Utilities
 
-splitHalf :: ByteString -> (ByteString, ByteString)
-splitHalf bs = BS.splitAt (BS.length bs `div` 2) bs
+decodeExtendData :: ByteString -> Maybe (ExtendData, ByteString)
+decodeExtendData payload = do
+  d: f: i: c: o: [] <- chopBS [1, 4, 4, 32] payload
+  (depth, _) <- BS.uncons d
+  fingerprint <- fromBigEndianFixed f
+  index <- fromBigEndianFixed i
+  chain <- fromBigEndianFixed c
+  return (ExtendData depth fingerprint (HDNode' index) chain, o)
 
-chopBS :: [Int64] -> ByteString -> [ByteString]
-chopBS [] bs = [bs]
-chopBS (n : ns) bs = h : chopBS ns t
-  where
-    (h, t) = BS.splitAt n bs
+encodeExtendData :: ExtendData -> ByteString
+encodeExtendData (ExtendData d f n c) = d `BS.cons`
+  toBigEndianFixed f `BS.append`
+  encodeHDNode n `BS.append`
+  toBigEndianFixed c
+
+splitHalf :: BigEndianFixed a => ByteString -> Maybe (a, a)
+splitHalf bs = do
+  let (l, r) = BS.splitAt (BS.length bs `div` 2) bs
+  vL <- fromBigEndianFixed l
+  vR <- fromBigEndianFixed r
+  return (vL, vR)
+
+chopBS :: [Int64] -> ByteString -> Maybe [ByteString]
+chopBS [] bs = Just [bs]
+chopBS (n : ns) bs = do
+  guard $ BS.length bs >= n
+  let (h, t) = BS.splitAt n bs
+  body <-  chopBS ns t
+  return $ h: body
 
 mkFingerprint :: ECPoint -> Word32
 mkFingerprint = read4 . hash160Data . hash160 . encodeECPoint True
@@ -355,3 +423,4 @@ eccP = (fromInteger $ EC.ecc_p cp) :: Word256
 eccG = EC.ecc_g $ EC.common_curve $ curve :: EC.Point
 
 masterSeed = C8.pack "Bitcoin seed" :: ByteString
+flagHardened = 1 `shift` 31
