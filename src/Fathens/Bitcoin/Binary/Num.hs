@@ -88,6 +88,12 @@ instance Random Word256 where
 
 instance BigEndianFixed Word256 where
   lengthOfBytes = bitsWord256 `div` 8
+
+  decodeBigEndian bs = do
+    let (d, o) = BS.splitAt (fromIntegral (lengthOfBytes :: Word256)) bs
+    v <- fromBigEndianFixed d
+    return (v, o)
+
   fromBigEndianFixed bs = do
     guard $ BS.length bs == fromIntegral (lengthOfBytes :: Word256)
     return $ fromIntegral $ fromBigEndian bs
@@ -96,6 +102,12 @@ instance BigEndianFixed Word256 where
 
 instance BigEndianFixed Word32 where
   lengthOfBytes = 32 `div` 8
+
+  decodeBigEndian bs = do
+    let (d, o) = BS.splitAt (fromIntegral (lengthOfBytes :: Word32)) bs
+    v <- fromBigEndianFixed d
+    return (v, o)
+
   fromBigEndianFixed bs = do
     guard $ BS.length bs == fromIntegral (lengthOfBytes :: Word32)
     return $ fromIntegral $ fromBigEndian bs
@@ -106,6 +118,7 @@ instance BigEndianFixed Word32 where
 
 class FiniteBits a => BigEndianFixed a where
   lengthOfBytes :: a
+  decodeBigEndian :: ByteString -> Maybe (a, ByteString)
   fromBigEndianFixed :: ByteString -> Maybe a
   toBigEndianFixed :: a -> ByteString
 
