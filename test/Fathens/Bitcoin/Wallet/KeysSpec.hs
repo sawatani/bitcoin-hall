@@ -70,7 +70,7 @@ spec = do
       forAll anyBits256 $ \k ->
         let p =  getPoint k
         in
-          trace (show p) (boomerang True p) `shouldBe` (True, p)
+          boomerang True p `shouldBe` (True, p)
 
   describe "Deriving HD Keys" $ do
     it "Test vector 1" $ do

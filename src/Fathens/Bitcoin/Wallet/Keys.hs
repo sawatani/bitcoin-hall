@@ -57,7 +57,7 @@ maxECC_K = fromInteger $ EC.ecc_n $ EC.common_curve $ curve
 data PrvKey = PrvKey Prefix ECKey Bool deriving (Show, Eq)
 
   -- ECKey ecK
-data ECKey = ECKey Word256 deriving (Show, Eq)
+newtype ECKey = ECKey Word256 deriving (Show, Eq)
 
   -- PubKey prefix ecPoint isCompress
 data PubKey = PubKey Prefix ECPoint Bool deriving (Show, Eq)
@@ -65,11 +65,11 @@ data PubKey = PubKey Prefix ECPoint Bool deriving (Show, Eq)
   -- ECPoint x y
 data ECPoint = ECPoint Word256 Word256 deriving (Show, Eq)
 
-data XPrvKey = XPrvKey Prefix HDPrvKey
-data HDPrvKey = HDPrvKey ExtendData ECKey
+data XPrvKey = XPrvKey Prefix HDPrvKey deriving (Show, Eq)
+data HDPrvKey = HDPrvKey ExtendData ECKey deriving (Show, Eq)
 
-data XPubKey = XPubKey Prefix HDPubKey
-data HDPubKey = HDPubKey ExtendData ECPoint
+data XPubKey = XPubKey Prefix HDPubKey deriving (Show, Eq)
+data HDPubKey = HDPubKey ExtendData ECPoint deriving (Show, Eq)
 
 data ExtendData = ExtendData {
   depth             :: Word8
@@ -193,7 +193,7 @@ instance ExtendPrivateKey HDPrvKey where
       childData = ExtendData (depth + 1) fingerprint
                   (flagedHDNode node) childChain
       childKey = ECKey $ fromInteger $
-        (toInteger k) + (toInteger l) `mod` toInteger maxECC_K
+        ((toInteger k) + (toInteger l)) `mod` (toInteger maxECC_K)
 
       fingerprint = mkFingerprint $ toPublicKey ec
 
