@@ -2,7 +2,7 @@ module Fathens.Bitcoin.Wallet.KeysSpec (spec) where
 
 import qualified Crypto.PubKey.ECC.Types        as EC
 import qualified Data.ByteString.Lazy           as BS
-import           Data.Maybe                     (fromJust)
+import           Data.Maybe
 import qualified Data.Text.Lazy                 as T
 import           Data.Word                      (Word32, Word64)
 import           Debug.Trace
@@ -116,21 +116,30 @@ spec = do
       (fst h0) `shouldBe` "xpub68NZiKmJWnxxS6aaHmn81bvJeTESw724CRDs6HbuccFQN9Ku14VQrADWgqbhhTHBaohPX4CjNLf9fq9MYo6oDaPPLPxSb7gwQN3ih19Zm4Y"
       (snd h0) `shouldBe` "xprv9uPDJpEQgRQfDcW7BkF7eTya6RPxXeJCqCJGHuCJ4GiRVLzkTXBAJMu2qaMWPrS7AANYqdq6vcBcBUdJCVVFceUvJFjaPdGZ2y9WACViL4L"
 
+    prop "derivePublicKey" $ do
+      forAll arbitrary $ \root ->
+        forAll genNodePath $ \path ->
+        forAll arbitrary $ \node ->
+        let parent = last $ mkChildren path root :: HDPrvKey
+            prvSide = toExtendPublicKey . flip derivePrivateKey node
+            pubSize = flip derivePublicKey node . toExtendPublicKey
+        in
+          prvSide (trace (show parent) parent) `shouldBe` pubSize parent
+
 anyBits256 :: Gen Word256
 anyBits256 = choose (minBound, maxECC_K)
 
 mkChain :: String -> [(Bool, Word32)] -> [(String, String)]
-mkChain seed ps = (asPair master): children ns master
+mkChain seed ps = (asPair master): map asPair children
   where
     master = toXPrvKey False $ fromJust $
       exKeyFromSeed $ fst $ head $ readHex seed
     ns = map (\(b, i) -> fromJust $ mkHDNode b i) ps
-    mkHDNode b i | b = flagedHDNode <$> hardenedHDNode i
-                 | otherwise = flagedHDNode <$> normalHDNode i
+    children = mkChildren ns master
 
-children :: [HDNode'] -> XPrvKey -> [(String, String)]
-children [] prv = []
-children (node: ns) prv = (asPair prv'): children ns prv'
+mkChildren :: ExtendPrivateKey a => [HDNode'] -> a -> [a]
+mkChildren [] prv = []
+mkChildren (node: ns) prv = prv': mkChildren ns prv'
   where
     prv' = derivePrivateKey prv node
 
@@ -139,3 +148,26 @@ asPair prv = (toString $ toBase58 $ toExtendPublicKey prv,
               toString $ toBase58 prv)
   where
     toString = T.unpack . base58Text
+
+genNodePath :: Gen [HDNode']
+genNodePath = do
+  n <- choose (2, 5)
+  v <- vector n
+  return v
+
+instance Arbitrary HDNodeNormal where
+  arbitrary = do
+    index <- choose (1, 2^31 - 1)
+    return $ fromJust $ normalHDNode index
+
+instance Arbitrary HDNode' where
+  arbitrary = do
+    isH <- arbitrary
+    index <- choose (1, 2^31 - 1)
+    return $ fromJust $ mkHDNode isH index
+
+instance Arbitrary HDPrvKey where
+  arbitrary = do
+    let seed = choose (toInteger 2^10, 2^500)
+    mkey <- suchThat (exKeyFromSeed <$> seed) isJust
+    return $ fromJust mkey

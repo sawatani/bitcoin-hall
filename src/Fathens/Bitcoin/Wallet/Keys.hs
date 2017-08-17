@@ -18,6 +18,7 @@ module Fathens.Bitcoin.Wallet.Keys (
 , HDNodeHardened
 , normalHDNode
 , hardenedHDNode
+, mkHDNode
 , exKeyFromSeed
 , toPrvKey
 , toPubKey
@@ -298,7 +299,7 @@ exKeyFromSeed i | i < 2^128 = mkMaster 128
                 | i < 2^512 = mkMaster 512
                 | otherwise = Nothing
   where
-    mkMaster n = fmap (HDPrvKey d) $ ecKey l
+    mkMaster n = HDPrvKey d <$> ecKey l
       where
         d = ExtendData 0 0 (HDNode' 0) r
         (l, r) = fromJust $ splitHalf $ hash512Data $ hmac512 masterSeed $
@@ -351,6 +352,9 @@ hardenedHDNode index = do
   guard $ index < 2^31
   return $ HDNodeHardened index
 
+mkHDNode :: Bool -> Word32 -> Maybe HDNode'
+mkHDNode b index | b = flagedHDNode <$> hardenedHDNode index
+               | otherwise = flagedHDNode <$> normalHDNode index
 -- Utilities
 
 decodeExtendData :: ByteString -> Maybe (ExtendData, ByteString)
