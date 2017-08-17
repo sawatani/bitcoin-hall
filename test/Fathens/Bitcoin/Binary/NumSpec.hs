@@ -1,4 +1,4 @@
-module Fathens.Bitcoin.Binary.HashSpec (spec) where
+module Fathens.Bitcoin.Binary.NumSpec (spec) where
 
 import qualified Data.ByteString.Lazy       as BS
 import           Data.Word                  (Word64)
@@ -19,9 +19,9 @@ spec = do
       bytes 0x1234567890abcdef `shouldBe` [
         0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef]
 
-  describe "toBigEndianFixed" $ do
+  describe "putBigEndianFixed" $ do
     it "make bytes" $ do
-      let bytes = BS.unpack . toBigEndianFixed 10
+      let bytes = BS.unpack . putBigEndianFixed 10
       bytes 0x1234567890abcdef `shouldBe` [
         0, 0, 0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef]
 
@@ -32,7 +32,7 @@ spec = do
         boomerang i `shouldBe` i
     prop "work vise versa with toBigEndianFixed" $ do
       let boomerang n = fromInteger . fromBigEndian .
-                        toBigEndianFixed n . toInteger
-      forAll (choose (8, 20)) $ \n ->
+                        putBigEndianFixed n . toInteger
+      forAll (choose (8, 20) :: Gen Word64) $ \n ->
         forAll (arbitrary :: Gen Word64) $ \i ->
         boomerang n i `shouldBe` i
