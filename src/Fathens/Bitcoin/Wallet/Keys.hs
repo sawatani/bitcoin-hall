@@ -12,13 +12,13 @@ module Fathens.Bitcoin.Wallet.Keys (
 , HDPubKey
 , ExtendPublicKey(..)
 , ExtendPrivateKey(..)
-, HDNode'
-, HDNode(..)
+, HDNode
 , HDNodeNormal
 , HDNodeHardened
+, generizeHDNode
 , normalHDNode
 , hardenedHDNode
-, mkHDNode
+, genericHDNode
 , exKeyFromSeed
 , toPrvKey
 , toPubKey
@@ -75,41 +75,41 @@ data HDPubKey = HDPubKey ExtendData ECPoint deriving (Show, Eq)
 data ExtendData = ExtendData {
   depth             :: Word8
 , parentFingerPrint :: Word32
-, node              :: HDNode'
+, node              :: HDNode
 , chainCode         :: Word256
 } deriving (Show, Eq)
 
-newtype HDNode' = HDNode' Word32 deriving (Show, Eq)
+newtype HDNode = HDNode Word32 deriving (Show, Eq)
 newtype HDNodeNormal = HDNodeNormal Word32 deriving (Show, Eq)
 newtype HDNodeHardened = HDNodeHardened Word32 deriving (Show, Eq)
 
 -- Instances
 
-instance HDNode HDNode' where
-  isHardened (HDNode' v) = 0 /= (v .&. flagHardened)
-  encodeHDNode (HDNode' index) = toBigEndianFixed index
+instance HDNode_ HDNode where
+  isHardened (HDNode v) = 0 /= (v .&. flagHardened)
+  encodeHDNode (HDNode index) = toBigEndianFixed index
   decodeHDNode bs = do
     (v, o) <- decodeBigEndian bs
-    return (HDNode' v, o)
-  flagedHDNode a = a
+    return (HDNode v, o)
+  generizeHDNode a = a
 
-instance HDNode HDNodeNormal where
+instance HDNode_ HDNodeNormal where
   isHardened _ = False
-  encodeHDNode = encodeHDNode . flagedHDNode
+  encodeHDNode = encodeHDNode . generizeHDNode
   decodeHDNode bs = do
-    (n@(HDNode' v), o) <- decodeHDNode bs
+    (n@(HDNode v), o) <- decodeHDNode bs
     guard $ not (isHardened n)
     return (HDNodeNormal v, o)
-  flagedHDNode (HDNodeNormal index) = HDNode' index
+  generizeHDNode (HDNodeNormal index) = HDNode index
 
-instance HDNode HDNodeHardened where
+instance HDNode_ HDNodeHardened where
   isHardened _ = True
-  encodeHDNode = encodeHDNode . flagedHDNode
+  encodeHDNode = encodeHDNode . generizeHDNode
   decodeHDNode bs = do
-    (n@(HDNode' v), o) <- decodeHDNode bs
+    (n@(HDNode v), o) <- decodeHDNode bs
     guard $ isHardened n
     return (HDNodeHardened $ v `xor` flagHardened, o)
-  flagedHDNode (HDNodeHardened v) = HDNode' $ v .|. flagHardened
+  generizeHDNode (HDNodeHardened v) = HDNode $ v .|. flagHardened
 
 instance ReadFromBase58 PrvKey where
   fromBase58 b58 = do
@@ -192,7 +192,7 @@ instance ExtendPrivateKey HDPrvKey where
       ExtendData depth _ _ chain = ed
 
       childData = ExtendData (depth + 1) fingerprint
-                  (flagedHDNode node) childChain
+                  (generizeHDNode node) childChain
       childKey = ECKey $ fromInteger $
         ((toInteger k) + (toInteger l)) `mod` (toInteger maxECC_K)
 
@@ -224,11 +224,13 @@ instance ExtendPublicKey HDPubKey where
 
   getPublicKey (HDPubKey _ p) = p
 
-  derivePublicKey (HDPubKey (ExtendData depth _ _ chain) ec) node
+  derivePublicKey (HDPubKey ed ec) node
     = HDPubKey childData childPoint
     where
+      ExtendData depth _ _ chain = ed
+
       childData = ExtendData (depth + 1) fingerprint
-                  (flagedHDNode node) childChain
+                  (generizeHDNode node) childChain
       childPoint = toPoint $ l @* eccG @+ fromPoint ec
 
       fingerprint = mkFingerprint ec
@@ -246,7 +248,7 @@ instance ExtendPublicKey XPubKey where
     where
       child = derivePublicKey hd node
 
-hdHash :: HDNode n => Word256 -> n -> ByteString -> (Word256, Word256)
+hdHash :: HDNode_ n => Word256 -> n -> ByteString -> (Word256, Word256)
 hdHash chain node body = (l, r)
   where
     (l, r) = fromJust $ splitHalf $ hash512Data $
@@ -265,18 +267,18 @@ class ExtendPrivateKey a where
   type ExtendPublicKeyType a :: *
   getPrivateKey :: a -> (InnerPrivateKeyType a)
   toExtendPublicKey :: a -> (ExtendPublicKeyType a)
-  derivePrivateKey :: HDNode n => a -> n -> a
+  derivePrivateKey :: HDNode_ n => a -> n -> a
 
 class ExtendPublicKey a where
   type InnerPublicKeyType a :: *
   getPublicKey :: a -> (InnerPublicKeyType a)
   derivePublicKey :: a -> HDNodeNormal -> a
 
-class HDNode a where
+class HDNode_ a where
   isHardened :: a -> Bool
   encodeHDNode :: a -> ByteString
   decodeHDNode :: ByteString -> Maybe (a, ByteString)
-  flagedHDNode :: a -> HDNode'
+  generizeHDNode :: a -> HDNode
 
 -- Functions
 
@@ -301,7 +303,7 @@ exKeyFromSeed i | i < 2^128 = mkMaster 128
   where
     mkMaster n = HDPrvKey d <$> ecKey l
       where
-        d = ExtendData 0 0 (HDNode' 0) r
+        d = ExtendData 0 0 (HDNode 0) r
         (l, r) = fromJust $ splitHalf $ hash512Data $ hmac512 masterSeed $
                  putBigEndianFixed (n `div` 8) i
 
@@ -352,9 +354,9 @@ hardenedHDNode index = do
   guard $ index < 2^31
   return $ HDNodeHardened index
 
-mkHDNode :: Bool -> Word32 -> Maybe HDNode'
-mkHDNode b index | b = flagedHDNode <$> hardenedHDNode index
-               | otherwise = flagedHDNode <$> normalHDNode index
+genericHDNode :: Bool -> Word32 -> Maybe HDNode
+genericHDNode b index | b = generizeHDNode <$> hardenedHDNode index
+                 | otherwise = generizeHDNode <$> normalHDNode index
 -- Utilities
 
 decodeExtendData :: ByteString -> Maybe (ExtendData, ByteString)
@@ -364,7 +366,7 @@ decodeExtendData payload = do
   fingerprint <- fromBigEndianFixed f
   index <- fromBigEndianFixed i
   chain <- fromBigEndianFixed c
-  return (ExtendData depth fingerprint (HDNode' index) chain, o)
+  return (ExtendData depth fingerprint (HDNode index) chain, o)
 
 encodeExtendData :: ExtendData -> ByteString
 encodeExtendData (ExtendData d f n c) = d `BS.cons`

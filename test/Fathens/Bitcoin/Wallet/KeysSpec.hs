@@ -124,7 +124,7 @@ spec = do
             prvSide = toExtendPublicKey . flip derivePrivateKey node
             pubSize = flip derivePublicKey node . toExtendPublicKey
         in
-          prvSide (trace (show parent) parent) `shouldBe` pubSize parent
+          prvSide parent `shouldBe` pubSize parent
 
 anyBits256 :: Gen Word256
 anyBits256 = choose (minBound, maxECC_K)
@@ -134,10 +134,10 @@ mkChain seed ps = (asPair master): map asPair children
   where
     master = toXPrvKey False $ fromJust $
       exKeyFromSeed $ fst $ head $ readHex seed
-    ns = map (\(b, i) -> fromJust $ mkHDNode b i) ps
+    ns = map (\(b, i) -> fromJust $ genericHDNode b i) ps
     children = mkChildren ns master
 
-mkChildren :: ExtendPrivateKey a => [HDNode'] -> a -> [a]
+mkChildren :: ExtendPrivateKey a => [HDNode] -> a -> [a]
 mkChildren [] prv = []
 mkChildren (node: ns) prv = prv': mkChildren ns prv'
   where
@@ -149,7 +149,7 @@ asPair prv = (toString $ toBase58 $ toExtendPublicKey prv,
   where
     toString = T.unpack . base58Text
 
-genNodePath :: Gen [HDNode']
+genNodePath :: Gen [HDNode]
 genNodePath = do
   n <- choose (2, 5)
   v <- vector n
@@ -160,11 +160,11 @@ instance Arbitrary HDNodeNormal where
     index <- choose (1, 2^31 - 1)
     return $ fromJust $ normalHDNode index
 
-instance Arbitrary HDNode' where
+instance Arbitrary HDNode where
   arbitrary = do
     isH <- arbitrary
     index <- choose (1, 2^31 - 1)
-    return $ fromJust $ mkHDNode isH index
+    return $ fromJust $ genericHDNode isH index
 
 instance Arbitrary HDPrvKey where
   arbitrary = do
