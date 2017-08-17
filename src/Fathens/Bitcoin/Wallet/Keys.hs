@@ -19,6 +19,7 @@ module Fathens.Bitcoin.Wallet.Keys (
 , normalHDNode
 , hardenedHDNode
 , genericHDNode
+, isHardened
 , exKeyFromSeed
 , toPrvKey
 , toPubKey
