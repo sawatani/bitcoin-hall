@@ -119,12 +119,16 @@ spec = do
     prop "derivePublicKey" $ do
       forAll arbitrary $ \root ->
         forAll genNodePath $ \path ->
-        forAll arbitrary $ \node ->
+        forAll arbitrary $ \nodeA ->
+        forAll arbitrary $ \nodeB ->
         let parent = last $ mkChildren path root :: HDPrvKey
-            prvSide = toExtendPublicKey . flip derivePrivateKey node
-            pubSize = flip derivePublicKey node . toExtendPublicKey
-        in
-          prvSide parent `shouldBe` pubSize parent
+            prvA = derivePrivateKey parent nodeA
+            pubA = derivePublicKey (toExtendPublicKey parent) nodeA
+            prvB = derivePrivateKey prvA nodeB
+            pubB = derivePublicKey pubA nodeB
+        in do
+          pubA `shouldBe` toExtendPublicKey prvA
+          pubB `shouldBe` toExtendPublicKey prvB
 
 anyBits256 :: Gen Word256
 anyBits256 = choose (minBound, maxECC_K)
