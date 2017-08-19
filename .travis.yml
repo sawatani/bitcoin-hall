@@ -23,7 +23,7 @@ before_install:
 install:
 - stack install --only-dependencies
 script:
-- stack test --coverage
+- stack test
 - stack build
 notifications:
   email: false
