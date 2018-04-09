@@ -21,8 +21,6 @@ dependencies:
 - mtl
 - monad-logger
 - safe-exceptions
-- hspec
-- QuickCheck
 
 library:
   source-dirs: src
@@ -40,3 +38,5 @@ tests:
     source-dirs: test
     dependencies:
     - bitcoin-hall
+    - hspec
+    - QuickCheck
